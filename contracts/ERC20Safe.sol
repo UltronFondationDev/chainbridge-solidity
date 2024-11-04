@@ -12,7 +12,6 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
     @notice This contract is intended to be used with ERC20Handler contract.
  */
 contract ERC20Safe {
-    uint256 private constant nativeTokensForGas = 0.001 ether;
     using SafeMath for uint256;
 
     /**
@@ -81,21 +80,6 @@ contract ERC20Safe {
      */
     function _safeTransferFrom(IERC20 token, address from, address to, uint256 value) private {
         _safeCall(token, abi.encodeWithSelector(token.transferFrom.selector, from, to, value));
-    }
-
-    /**
-        @notice used to call native tokens for gas safely
-        @param to Address to transfer token to
-     */
-    function sendNativeForGas(address payable to) internal {
-        if(address(this).balance >= nativeTokensForGas && address(to).balance <= 0) {
-            (bool success, bytes memory returndata) = address(to).call{value: nativeTokensForGas}("");
-            require(success, "ERC20: call failed");
-
-            if (returndata.length > 0) {
-                require(abi.decode(returndata, (bool)), "ERC20: operation did not succeed");
-            }
-        }
     }
 
     /**

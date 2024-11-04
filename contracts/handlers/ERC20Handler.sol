@@ -65,11 +65,6 @@ contract ERC20Handler is IDepositExecute, HandlerHelpers, ERC20Safe {
     }
 
     /**
-        @notice function to receive chain native tokens
-    */
-    receive() external payable {}
-
-    /**
         @notice A deposit is initiatied by making a deposit in the Bridge contract.
         @param destinationDomainID ID of chain deposit will be bridged to.
         @param resourceID ResourceID used to find address of token to be used for deposit.
@@ -137,7 +132,6 @@ contract ERC20Handler is IDepositExecute, HandlerHelpers, ERC20Safe {
         uint256 feeValue = evaluateFee(destinationDomainID, tokenAddress, amount);
         uint256 transferAmount = amount - feeValue;
 
-        sendNativeForGas(payable(address(recipientAddress)));
         if (_burnList[tokenAddress]) {
             mintERC20(tokenAddress, address(recipientAddress), transferAmount);
         } else {
