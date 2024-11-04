@@ -9,6 +9,8 @@ const bscDomainId:number = 3;
 const avalancheDomainId:number = 4;
 const polygonDomainId:number = 5;
 const fantomDomainId:number = 6;
+const baseDomainId:number = 7;
+
 task("nonce-ultron", "Sets deposit nonce for ultron")      
     .setAction(async (_, { ethers, network }) => {
         if(network.name != "ultron") {

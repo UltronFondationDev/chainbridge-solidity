@@ -66,6 +66,11 @@ const config: HardhatUserConfig = {
       gasPrice: 25000000000,
       accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
+    base: {
+      url: "https://mainnet.base.org",
+      chainId: 8453,
+      accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    },
     bsc: {
       url: "https://bsc-dataseed1.binance.org/",
       chainId: 56,

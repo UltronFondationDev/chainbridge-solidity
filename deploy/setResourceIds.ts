@@ -67,7 +67,8 @@ task("set-resource-ids-burnable-ultron", "Setting burnable and resource Ids for 
             // new Token("EGLD",  "0x1869e04426974e3fF82417692Cc610c15f4F56d1"),
             // new Token("SNX",   "0x167536058b060E38e07B6defAbcD74d169b8fCAD"),
             
-            new Token("PEPE",   "0x2e29eab368c30E692B9805084C0D3B07215D7762"),
+            // new Token("PEPE",   "0x2e29eab368c30E692B9805084C0D3B07215D7762"),
+            // new Token("AK1111",   "0x52b502e0c7986A3c705DCf411E768e5cE90c87ec"), 
         ];
 
         // for(let i:number = 2; i <= tokenAddresses.length - 4; i++) {
@@ -127,7 +128,8 @@ task("set-resource-ids-burnable-ultron", "Setting burnable and resource Ids for 
             // new TokenResourceId("EGLD",   "0x00000000000000000000001869e04426974e3fF82417692Cc610c15f4F56d101"),
             // new TokenResourceId("SNX",    "0x0000000000000000000000167536058b060E38e07B6defAbcD74d169b8fCAD01"),
 
-            new TokenResourceId("PEPE",   "0x00000000000000000000002e29eab368c30e692b9805084c0d3b07215d776201"),
+            // new TokenResourceId("PEPE",   "0x00000000000000000000002e29eab368c30e692b9805084c0d3b07215d776201"),
+            // new TokenResourceId("AK1111",   "0x000000000000000000000052b502e0c7986A3c705DCf411E768e5cE90c87ec01"),
         ];
 
         // const handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
@@ -753,6 +755,84 @@ task("set-resource-ids-burnable-fantom", "Setting resource Ids for tokens")
         // }
 
         // for(let i:number = iteratorResource; i <= (await DAO.getSetResourceRequestCount()); i++) {
+        //     await bridge.adminSetResource(i);    
+        //     console.info(`adminSetResource ${i}`)
+        //     await Helpers.delay(4000);
+        // }
+
+        // for(let i:number = iteratorBurnable + 1; i <= iteratorBurnable + tokenAddresses.length; i++) {
+        //     await DAO.newSetBurnableRequest(erc20HandlerAddress, tokenAddresses[i - iteratorBurnable - 1].tokenAddress);
+        //     console.info(`${tokenAddresses[i - iteratorBurnable - 1].tokenName} - ${await DAO.getSetBurnableRequestCount()}`)
+        //     await Helpers.delay(4000);
+        // }
+
+        // for(let i:number = iteratorBurnable; i <= (await DAO.getSetBurnableRequestCount()); i++) {
+        //     await bridge.adminSetBurnable(i);
+        //     console.info(`adminSetBurnable ${i}`)
+        //     await Helpers.delay(4000);
+        // }
+
+        return true;
+    });
+
+task("set-resource-ids-burnable-base", "Setting resource Ids for tokens")      
+    .setAction(async (_, { ethers, network }) => {
+        if(network.name != "base") {
+            console.error("Should be base network!");
+            return;
+        }
+        const signer = (await ethers.getSigners())[0];
+
+        const bridgeAddress = "0x6Ab2A602d1018987Cdcb29aE6fB6E3Ebe44b1412";
+        const daoAddress = "0x9DcD76b4A7357249d6160D456670bAcC53292e27";
+        const erc20HandlerAddress = "0xFe21Dd0eC80e744A473770827E1aD6393A5A94F0";
+
+        const bridge = await ethers.getContractAt("Bridge", bridgeAddress, signer);
+        const DAO = await ethers.getContractAt("DAO", daoAddress, signer);
+        
+        const tokenAddresses = [
+            new Token("ULX",    "0x598E5dBC2f6513E6cb1bA253b255A5b73A2a720b"), 
+            new Token("USDT",   "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2"),
+            new Token("AK1111", "0x3c4E0FdeD74876295Ca36F62da289F69E3929cc4"),
+        ];
+
+        const resourceIds = [
+            new TokenResourceId("ULX",       "0x00000000000000000000003a4F06431457de873B588846d139EC0d86275d5401"),
+            new TokenResourceId("USDT",      "0x0000000000000000000000b7fe74c0c957534400d2ff0612d3f59af79eba4901"),
+            new TokenResourceId("AK1111",    "0x000000000000000000000052b502e0c7986A3c705DCf411E768e5cE90c87ec01"),
+        ];
+
+        // for(let i:number = 1; i <= tokenAddresses.length; i++) {
+        //     let token = await ethers.getContractAt("ERC20Custom", tokenAddresses[i - 1].tokenAddress, signer);
+        //     let role = await token.MINTER_ROLE(); 
+        //     // await token.grantMinterRole(erc20HandlerAddress);
+        //     // await Helpers.delay(4000);
+        //     console.info(`${tokenAddresses[i - 1].tokenName} ${await token.hasRole(role, erc20HandlerAddress)}`);
+        // }
+
+        const handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
+        for(let i:number = 1; i <= tokenAddresses.length; i++) {
+            let tokenAddress = await handler._resourceIDToTokenContractAddress(resourceIds[i - 1].resourceId); 
+            console.info(`${tokenAddresses[i - 1].tokenName} - ${tokenAddress.toLowerCase() == tokenAddresses[i - 1].tokenAddress.toLowerCase()}`);
+        }
+
+        for(let i:number = 1; i <= tokenAddresses.length; i++) {
+            let isBurnable = await handler._burnList(tokenAddresses[i - 1].tokenAddress); 
+            console.info(`Burnable ${tokenAddresses[i - 1].tokenName} - ${isBurnable}`);
+        }
+        
+        const iteratorResource = +(await DAO.getSetResourceRequestCount());
+        console.info(iteratorResource);   
+        const iteratorBurnable = +(await DAO.getSetBurnableRequestCount());     
+        console.info(iteratorBurnable);       
+        
+        // for(let i:number = iteratorResource + 1; i <= iteratorResource + tokenAddresses.length; i++) {
+        //     await DAO.newSetResourceRequest(erc20HandlerAddress, resourceIds[i - iteratorResource - 1].resourceId, tokenAddresses[i - iteratorResource - 1].tokenAddress);
+        //     await Helpers.delay(4000);
+        //     console.info(`${resourceIds[i - iteratorResource - 1].tokenName} - ${resourceIds[i - iteratorResource - 1].resourceId} - ${await DAO.getSetResourceRequestCount()}`)
+        // }
+
+        // for(let i:number = 1; i <= (await DAO.getSetResourceRequestCount()); i++) {
         //     await bridge.adminSetResource(i);    
         //     console.info(`adminSetResource ${i}`)
         //     await Helpers.delay(4000);

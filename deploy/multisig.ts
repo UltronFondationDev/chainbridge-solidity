@@ -149,3 +149,31 @@ task("multisig-fantom", "Sets multisig for fantom")
         
         console.info(`IsVoter [${voterAddress}] = ${await DAO.getVoterStatusByAddress(voterAddress)}`);
     });
+
+task("multisig-base", "Sets multisig for base")      
+    .setAction(async (_, { ethers, network }) => {
+        if(network.name != "base") {
+            console.error("Should be base network!");
+            return;
+        }
+        const signer = (await ethers.getSigners())[0];
+
+        const daoAddress = "0x9DcD76b4A7357249d6160D456670bAcC53292e27";
+        const DAO = await ethers.getContractAt("DAO", daoAddress, signer);
+        
+        const voterAddress = "0x4CE535D6E2D47690e33CA646972807BeB264dFBf"
+        const voter2 = '0x834328542F8AA94d34C7d1aB39730f710C74fdc5'
+        
+        console.info(await DAO.getActiveVotersCount());      
+        await DAO.newVoterRequest(true, voterAddress);
+        await Helpers.delay(4000);
+        await DAO.newVoterRequest(true, voter2);
+        await Helpers.delay(4000);
+
+        let iterator = +(await DAO.getActiveVotersCount());
+        console.info(iterator);
+        await DAO.votersRequestConclusion(1);
+        await Helpers.delay(4000);
+        
+        console.info(`IsVoter [${voterAddress}] = ${await DAO.getVoterStatusByAddress(voterAddress)}`);
+    });

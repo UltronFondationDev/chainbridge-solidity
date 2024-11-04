@@ -34,20 +34,23 @@ subtask("bridge", "contract Bridge is deployed")
         if(network.name === "ultron") {
             domainId = 1;
         }
-        if(network.name === "ethereum") {
+        else if(network.name === "ethereum") {
             domainId = 2;
         }
-        if(network.name === "bsc") {
+        else if(network.name === "bsc") {
             domainId = 3;
         }
-        if(network.name === "avalanche") {
+        else if(network.name === "avalanche") {
             domainId = 4;
         }
-        if(network.name === "polygon") {
+        else if(network.name === "polygon") {
             domainId = 5;
         }
-        if(network.name === "fantom") {
+        else if(network.name === "fantom") {
             domainId = 6;
+        } 
+        else if(network.name === "base") {
+            domainId = 7;
         }
 
         const initialRealyers:string[] = [
@@ -59,7 +62,7 @@ subtask("bridge", "contract Bridge is deployed")
 
         const initialRelayerThreshold:BigNumberish = 2;
 
-        const expiry:BigNumberish = 40;
+        const expiry:BigNumberish = 400;
         const feeMaxValue:BigNumberish = 10000;
         const feePercent:BigNumberish = 10;
 
@@ -216,11 +219,14 @@ task("deploy-ulx", "Deploying ULX for different chains")
         }
         else if(network.name === "fantom") {
             erc20HandlerAddress = '0x598E5dBC2f6513E6cb1bA253b255A5b73A2a720b';
+        }  
+        else if(network.name === "base") {
+            erc20HandlerAddress = '0xFe21Dd0eC80e744A473770827E1aD6393A5A94F0';
         }       
         
         const signer = (await ethers.getSigners())[0];
 
-        const erc20CustomFactory = await ethers.getContractFactory("ERC20Custom", signer);
+        let erc20CustomFactory = await ethers.getContractFactory("ERC20CustomPermit", signer);
 
         const ulx = await (await erc20CustomFactory.deploy("Ultron", "ULX")).deployed();
         const minterRole = await ulx.MINTER_ROLE();
@@ -236,8 +242,15 @@ task("deploy-sub-tokens", "Deploying sub tokens for our chain")
     .setAction(async (taskArgs, { ethers }) => {
         const signer = (await ethers.getSigners())[0];
 
-        const erc20CustomFactory = await ethers.getContractFactory("ERC20Custom", signer);
-        const erc20BtcFactory = await ethers.getContractFactory("ERC20Btc", signer);
+        const erc20CustomFactory = await ethers.getContractFactory("ERC20CustomPermit", signer);
+        const erc20BtcFactory = await ethers.getContractFactory("ERC20BtcPermit", signer);
+
+        const usdt = await ethers.getContractAt("ERC20Stable", "0x97FDd294024f50c388e39e73F1705a35cfE87656", signer)
+        const minterRole = await usdt.MINTER_ROLE();
+        const adminRole = await usdt.DEFAULT_ADMIN_ROLE();
+        // console.log(await usdt.getRoleMemberCount(adminRole))
+        // console.log(await usdt.getRoleMember(adminRole, 0))
+        // console.log(await usdt.getRoleMember(adminRole, 1))
 
         // const doge = await (await erc20BtcFactory.deploy("Dogecoin", "DOGE")).deployed();
         // const minterRole = await doge.MINTER_ROLE();
@@ -327,4 +340,8 @@ task("deploy-sub-tokens", "Deploying sub tokens for our chain")
         // const pepe = await (await erc20CustomFactory.deploy("Pepe", "PEPE")).deployed();
         // await pepe.grantRole(minterRole, taskArgs.erc20Handler);
         // console.log(`PEPE: \u001b[1;34m${pepe.address}\u001b[0m`);
+
+        // const akasha = await (await erc20CustomFactory.deploy("Akashalife", "AK1111")).deployed();
+        // await akasha.grantRole(minterRole, taskArgs.erc20Handler);
+        // console.log(`AK1111: \u001b[1;34m${akasha.address}\u001b[0m`);
     });
