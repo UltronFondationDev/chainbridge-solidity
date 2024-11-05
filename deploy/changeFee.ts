@@ -1515,7 +1515,7 @@ task("fee-base", "Changing fee for base tokens")
         const tokenAddresses = [
             new Token("ULX",    "0x598E5dBC2f6513E6cb1bA253b255A5b73A2a720b"), 
             new Token("USDT",   "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2"),
-            new Token("AK1111", "0x3c4E0FdeD74876295Ca36F62da289F69E3929cc4"),
+            new Token("AK1111", "0x54b659832f59c24ceC0E4A2Cd193377F1BCEfc3c"),
         ];
 
         const iterator = +(await DAO.getChangeFeeRequestCount()) + 1;
@@ -1541,12 +1541,12 @@ task("fee-base", "Changing fee for base tokens")
         // await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "USDT"), ultronDomainId, Helpers.parseDecimals(0.9, 6), Helpers.parseDecimals(12, 6), Helpers.parseDecimals(2000000, 6));
         // await Helpers.delay(8000);
 
-        // // AK1111
-        // await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "AK1111"), domainId, Helpers.parseDecimals(2, 18), Helpers.parseDecimals(5, 18), Helpers.parseDecimals(50000000, 18));
-        // await Helpers.delay(4000);
+        // AK1111
+        await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "AK1111"), domainId, Helpers.parseDecimals(2, 18), Helpers.parseDecimals(5, 18), Helpers.parseDecimals(50000000, 18));
+        await Helpers.delay(4000);
         
-        // await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "AK1111"), ultronDomainId, Helpers.parseDecimals(2, 18), Helpers.parseDecimals(5, 18), Helpers.parseDecimals(50000000, 18));
-        // await Helpers.delay(4000);
+        await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "AK1111"), ultronDomainId, Helpers.parseDecimals(2, 18), Helpers.parseDecimals(5, 18), Helpers.parseDecimals(50000000, 18));
+        await Helpers.delay(4000);
 
         // for(let i:number = iterator; i <= (await DAO.getChangeFeeRequestCount()); i++) {
         //     await bridge.adminChangeFee(i);

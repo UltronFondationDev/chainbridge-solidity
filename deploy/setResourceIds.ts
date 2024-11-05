@@ -793,7 +793,7 @@ task("set-resource-ids-burnable-base", "Setting resource Ids for tokens")
         const tokenAddresses = [
             new Token("ULX",    "0x598E5dBC2f6513E6cb1bA253b255A5b73A2a720b"), 
             new Token("USDT",   "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2"),
-            new Token("AK1111", "0x3c4E0FdeD74876295Ca36F62da289F69E3929cc4"),
+            new Token("AK1111", "0x54b659832f59c24ceC0E4A2Cd193377F1BCEfc3c"),
         ];
 
         const resourceIds = [
