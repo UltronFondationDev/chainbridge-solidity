@@ -83,7 +83,7 @@ subtask("ERC20Handler", "contract ERC20Handler is deployed")
     .setAction(async (taskArgs, { ethers }) => {
         const signer = (await ethers.getSigners())[0];
 
-        const treasuryAddress = "0x976B649bacA4CB2af970e091B45d862965520276";
+        const treasuryAddress = "0xf0c623A9cE01Bace0984e2B24E8A4DB2A799D6e6";
         
         const ERC20HandlerFactory = await ethers.getContractFactory("ERC20Handler", signer);
         const ERC20Handler = await (await ERC20HandlerFactory.deploy(taskArgs.bridge, treasuryAddress)).deployed();

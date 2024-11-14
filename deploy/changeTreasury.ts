@@ -23,15 +23,16 @@ task("treasury-ultron", "Sets  treasury for ultron")
         const DAO = await ethers.getContractAt("DAO", daoAddress, signer);
         const erc20Handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
 
-        const treasuryAddress = "0x2c9bd37460430538F52263054261AB5081364497"
-        
+        const treasuryAddress = "0xf0c623A9cE01Bace0984e2B24E8A4DB2A799D6e6"
+        console.log(await erc20Handler.getTreasuryAddress())
+
         console.info(await DAO.getSetTreasuryRequestCount());      
         await DAO.newSetTreasuryRequest(treasuryAddress);
         await Helpers.delay(4000);
 
-        let iterator = +(await DAO.getSetTreasuryRequestCount());
-        console.info(iterator);
-        await erc20Handler.setTreasuryAddress(iterator);
+        // let iterator = +(await DAO.getSetTreasuryRequestCount());
+        // console.info(iterator);
+        // await erc20Handler.setTreasuryAddress(iterator);
     });
 
 task("treasury-ethereum", "Sets  treasury for ethereum")         
@@ -50,16 +51,17 @@ task("treasury-ethereum", "Sets  treasury for ethereum")
         const DAO = await ethers.getContractAt("DAO", daoAddress, signer);
         const erc20Handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
 
-        const treasuryAddress = "0x2c9bd37460430538F52263054261AB5081364497"
+        const treasuryAddress = "0xf0c623A9cE01Bace0984e2B24E8A4DB2A799D6e6"
+        console.log(await erc20Handler.getTreasuryAddress())
 
         console.info(await DAO.getSetTreasuryRequestCount());      
         await DAO.newSetTreasuryRequest(treasuryAddress);
         await Helpers.delay(4000);
 
-        const iterator = +(await DAO.getSetTreasuryRequestCount());
-        console.info(iterator);
-        await erc20Handler.setTreasuryAddress(iterator);
-        await Helpers.delay(4000);
+        // const iterator = +(await DAO.getSetTreasuryRequestCount());
+        // console.info(iterator);
+        // await erc20Handler.setTreasuryAddress(iterator);
+        // await Helpers.delay(4000);
     });
 
 task("treasury-bsc", "Sets  treasury for bsc")      
@@ -78,16 +80,17 @@ task("treasury-bsc", "Sets  treasury for bsc")
         const DAO = await ethers.getContractAt("DAO", daoAddress, signer);
         const erc20Handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
         
-        const treasuryAddress = "0x2c9bd37460430538F52263054261AB5081364497"
-        
+        const treasuryAddress = "0xf0c623A9cE01Bace0984e2B24E8A4DB2A799D6e6"
+        console.log(await erc20Handler.getTreasuryAddress())
+
         console.info(await DAO.getSetTreasuryRequestCount());      
         await DAO.newSetTreasuryRequest(treasuryAddress);
         await Helpers.delay(8000);
 
-        const iterator = +(await DAO.getSetTreasuryRequestCount());
-        console.info(iterator);
-        await erc20Handler.setTreasuryAddress(iterator);
-        await Helpers.delay(8000);
+        // const iterator = +(await DAO.getSetTreasuryRequestCount());
+        // console.info(iterator);
+        // await erc20Handler.setTreasuryAddress(iterator);
+        // await Helpers.delay(8000);
     });
 
 task("treasury-avalanche", "Sets  treasury for avalanche")     
@@ -106,16 +109,17 @@ task("treasury-avalanche", "Sets  treasury for avalanche")
         const DAO = await ethers.getContractAt("DAO", daoAddress, signer);
         const erc20Handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
         
-        const treasuryAddress = "0x2c9bd37460430538F52263054261AB5081364497"
-        
+        const treasuryAddress = "0xf0c623A9cE01Bace0984e2B24E8A4DB2A799D6e6"
+        console.log(await erc20Handler.getTreasuryAddress())
+
         console.info(await DAO.getSetTreasuryRequestCount());      
         await DAO.newSetTreasuryRequest(treasuryAddress);
         await Helpers.delay(4000);
 
-        const iterator = +(await DAO.getSetTreasuryRequestCount());
-        console.info(iterator);
-        await erc20Handler.setTreasuryAddress(iterator);
-        await Helpers.delay(4000);
+        // const iterator = +(await DAO.getSetTreasuryRequestCount());
+        // console.info(iterator);
+        // await erc20Handler.setTreasuryAddress(iterator);
+        // await Helpers.delay(4000);
     });
 
 task("treasury-polygon", "Sets  treasury for polygon")    
@@ -134,16 +138,17 @@ task("treasury-polygon", "Sets  treasury for polygon")
         const DAO = await ethers.getContractAt("DAO", daoAddress, signer);
         const erc20Handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
         
-        const treasuryAddress = "0x2c9bd37460430538F52263054261AB5081364497"
-        
+        const treasuryAddress = "0xf0c623A9cE01Bace0984e2B24E8A4DB2A799D6e6"
+        console.log(await erc20Handler.getTreasuryAddress())
+
         console.info(await DAO.getSetTreasuryRequestCount());      
         await DAO.newSetTreasuryRequest(treasuryAddress);
         await Helpers.delay(4000);
 
-        const iterator = +(await DAO.getSetTreasuryRequestCount());
-        console.info(iterator);
-        await erc20Handler.setTreasuryAddress(iterator);
-        await Helpers.delay(4000);
+        // const iterator = +(await DAO.getSetTreasuryRequestCount());
+        // console.info(iterator);
+        // await erc20Handler.setTreasuryAddress(iterator);
+        // await Helpers.delay(4000);
     });
 
 task("treasury-fantom", "Sets  treasury for fantom")      
@@ -162,14 +167,44 @@ task("treasury-fantom", "Sets  treasury for fantom")
         const DAO = await ethers.getContractAt("DAO", daoAddress, signer);
         const erc20Handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
         
-        const treasuryAddress = "0x2c9bd37460430538F52263054261AB5081364497"
-        
+        const treasuryAddress = "0xf0c623A9cE01Bace0984e2B24E8A4DB2A799D6e6"
+        console.log(await erc20Handler.getTreasuryAddress())
+
         console.info(await DAO.getSetTreasuryRequestCount());      
         await DAO.newSetTreasuryRequest(treasuryAddress);
         await Helpers.delay(4000);
 
-        const iterator = +(await DAO.getSetTreasuryRequestCount());
-        console.info(iterator);
-        await erc20Handler.setTreasuryAddress(iterator);
+        // const iterator = +(await DAO.getSetTreasuryRequestCount());
+        // console.info(iterator);
+        // await erc20Handler.setTreasuryAddress(iterator);
+        // await Helpers.delay(4000);
+    });
+
+task("treasury-base", "Sets  treasury for base")    
+    .setAction(async (_, { ethers, network }) => {
+        if(network.name != "base") {
+            console.error("Should be base network!");
+            return;
+        }
+        const signer = (await ethers.getSigners())[0];
+
+        const bridgeAddress = "0x6Ab2A602d1018987Cdcb29aE6fB6E3Ebe44b1412";
+        const daoAddress = "0x9DcD76b4A7357249d6160D456670bAcC53292e27";
+        const erc20HandlerAddress = "0xFe21Dd0eC80e744A473770827E1aD6393A5A94F0";
+
+        const bridge = await ethers.getContractAt("Bridge", bridgeAddress, signer);
+        const DAO = await ethers.getContractAt("DAO", daoAddress, signer);
+        const erc20Handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
+        
+        const treasuryAddress = "0xf0c623A9cE01Bace0984e2B24E8A4DB2A799D6e6"
+        console.log(await erc20Handler.getTreasuryAddress())
+
+        console.info(await DAO.getSetTreasuryRequestCount());      
+        await DAO.newSetTreasuryRequest(treasuryAddress);
         await Helpers.delay(4000);
+
+        // const iterator = +(await DAO.getSetTreasuryRequestCount());
+        // console.info(iterator);
+        // await erc20Handler.setTreasuryAddress(iterator);
+        // await Helpers.delay(4000);
     });

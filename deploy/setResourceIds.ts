@@ -794,12 +794,14 @@ task("set-resource-ids-burnable-base", "Setting resource Ids for tokens")
             new Token("ULX",    "0x598E5dBC2f6513E6cb1bA253b255A5b73A2a720b"), 
             new Token("USDT",   "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2"),
             new Token("AK1111", "0x54b659832f59c24ceC0E4A2Cd193377F1BCEfc3c"),
+            new Token("USDC",   "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
         ];
 
         const resourceIds = [
             new TokenResourceId("ULX",       "0x00000000000000000000003a4F06431457de873B588846d139EC0d86275d5401"),
             new TokenResourceId("USDT",      "0x0000000000000000000000b7fe74c0c957534400d2ff0612d3f59af79eba4901"),
             new TokenResourceId("AK1111",    "0x000000000000000000000052b502e0c7986A3c705DCf411E768e5cE90c87ec01"),
+            new TokenResourceId("USDC",      "0x0000000000000000000000026d9a638b8981ed47aa1580f79533cea7c1fc4801"),
         ];
 
         // for(let i:number = 1; i <= tokenAddresses.length; i++) {
@@ -810,16 +812,16 @@ task("set-resource-ids-burnable-base", "Setting resource Ids for tokens")
         //     console.info(`${tokenAddresses[i - 1].tokenName} ${await token.hasRole(role, erc20HandlerAddress)}`);
         // }
 
-        const handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
-        for(let i:number = 1; i <= tokenAddresses.length; i++) {
-            let tokenAddress = await handler._resourceIDToTokenContractAddress(resourceIds[i - 1].resourceId); 
-            console.info(`${tokenAddresses[i - 1].tokenName} - ${tokenAddress.toLowerCase() == tokenAddresses[i - 1].tokenAddress.toLowerCase()}`);
-        }
+        // const handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
+        // for(let i:number = 1; i <= tokenAddresses.length; i++) {
+        //     let tokenAddress = await handler._resourceIDToTokenContractAddress(resourceIds[i - 1].resourceId); 
+        //     console.info(`${tokenAddresses[i - 1].tokenName} - ${tokenAddress.toLowerCase() == tokenAddresses[i - 1].tokenAddress.toLowerCase()}`);
+        // }
 
-        for(let i:number = 1; i <= tokenAddresses.length; i++) {
-            let isBurnable = await handler._burnList(tokenAddresses[i - 1].tokenAddress); 
-            console.info(`Burnable ${tokenAddresses[i - 1].tokenName} - ${isBurnable}`);
-        }
+        // for(let i:number = 1; i <= tokenAddresses.length; i++) {
+        //     let isBurnable = await handler._burnList(tokenAddresses[i - 1].tokenAddress); 
+        //     console.info(`Burnable ${tokenAddresses[i - 1].tokenName} - ${isBurnable}`);
+        // }
         
         const iteratorResource = +(await DAO.getSetResourceRequestCount());
         console.info(iteratorResource);   
