@@ -69,6 +69,7 @@ task("set-resource-ids-burnable-ultron", "Setting burnable and resource Ids for 
             
             // new Token("PEPE",   "0x2e29eab368c30E692B9805084C0D3B07215D7762"),
             // new Token("AK1111",   "0x52b502e0c7986A3c705DCf411E768e5cE90c87ec"), 
+            new Token("MOODENG",   "0xCB743D15F88789498A6dA9C6438FBAd9D7befae7"), 
         ];
 
         // for(let i:number = 2; i <= tokenAddresses.length - 4; i++) {
@@ -130,6 +131,7 @@ task("set-resource-ids-burnable-ultron", "Setting burnable and resource Ids for 
 
             // new TokenResourceId("PEPE",   "0x00000000000000000000002e29eab368c30e692b9805084c0d3b07215d776201"),
             // new TokenResourceId("AK1111",   "0x000000000000000000000052b502e0c7986A3c705DCf411E768e5cE90c87ec01"),
+            new TokenResourceId("MOODENG",      "0x00000000000000000000001111111111CbDd6Ee1eE4689368576c50094DCb501"),
         ];
 
         // const handler = await ethers.getContractAt("ERC20Handler", erc20HandlerAddress, signer);
@@ -148,13 +150,13 @@ task("set-resource-ids-burnable-ultron", "Setting burnable and resource Ids for 
         const iteratorBurnable = +(await DAO.getSetBurnableRequestCount());     
         console.info(iteratorBurnable);
 
-        // // let resourceIds: string[] = [];
-        // for(let i:number = iteratorResource + 1; i <= iteratorResource + tokenAddresses.length; i++) {
-        //     // resourceIds.push(Helpers.createResourceID(tokenAddresses[i - iteratorResource - 1].tokenAddress, domainId));
-        //     await DAO.newSetResourceRequest(erc20HandlerAddress, resourceIds[i - iteratorResource - 1].resourceId, tokenAddresses[i - iteratorResource - 1].tokenAddress);
-        //     await Helpers.delay(4000);
-        //     console.info(`${resourceIds[i - iteratorResource - 1].tokenName} - ${resourceIds[i - iteratorResource - 1].resourceId} - ${await DAO.getSetResourceRequestCount()}`)
-        // }
+        // let resourceIds: string[] = [];
+        for(let i:number = iteratorResource + 1; i <= iteratorResource + tokenAddresses.length; i++) {
+            // resourceIds.push(Helpers.createResourceID(tokenAddresses[i - iteratorResource - 1].tokenAddress, domainId));
+            await DAO.newSetResourceRequest(erc20HandlerAddress, resourceIds[i - iteratorResource - 1].resourceId, tokenAddresses[i - iteratorResource - 1].tokenAddress);
+            await Helpers.delay(4000);
+            console.info(`${resourceIds[i - iteratorResource - 1].tokenName} - ${resourceIds[i - iteratorResource - 1].resourceId} - ${await DAO.getSetResourceRequestCount()}`)
+        }
 
         // for(let i:number = iteratorResource; i <= (await DAO.getSetResourceRequestCount()); i++) {
         //     await bridge.adminSetResource(i);    
@@ -354,7 +356,8 @@ task("set-resource-ids-burnable-bsc", "Setting resource Ids for tokens")
             // new Token("VET", "0x6FDcdfef7c496407cCb0cEC90f9C5Aaa1Cc8D888"),
             // new Token("EGLD", "0xbF7c81FFF98BbE61B40Ed186e4AfD6DDd01337fe"),
             // new Token("SNX", "0x9Ac983826058b8a9C7Aa1C9171441191232E8404"),
-            new Token("PEPE", "0x25d887Ce7a35172C62FeBFD67a1856F20FaEbB00"),
+            // new Token("PEPE", "0x25d887Ce7a35172C62FeBFD67a1856F20FaEbB00"),
+            new Token("MOODENG", "0x1111111111CbDd6Ee1eE4689368576c50094DCb5"),
         ];
 
         const resourceIds = [
@@ -396,7 +399,8 @@ task("set-resource-ids-burnable-bsc", "Setting resource Ids for tokens")
             // new TokenResourceId("VET",    "0x00000000000000000000001a9F8a54E151377d1067DB335C748df2deB0955201"),
             // new TokenResourceId("EGLD",   "0x00000000000000000000001869e04426974e3fF82417692Cc610c15f4F56d101"),
             // new TokenResourceId("SNX",    "0x0000000000000000000000167536058b060E38e07B6defAbcD74d169b8fCAD01"),
-            new TokenResourceId("PEPE",      "0x00000000000000000000002e29eab368c30e692b9805084c0d3b07215d776201"),
+            // new TokenResourceId("PEPE",      "0x00000000000000000000002e29eab368c30e692b9805084c0d3b07215d776201"),
+            new TokenResourceId("MOODENG",      "0x00000000000000000000001111111111CbDd6Ee1eE4689368576c50094DCb501"),
         ];
 
         // for(let i:number = 1; i <= tokenAddresses.length; i++) {
@@ -423,11 +427,11 @@ task("set-resource-ids-burnable-bsc", "Setting resource Ids for tokens")
         const iteratorBurnable = +(await DAO.getSetBurnableRequestCount());     
         console.info(iteratorBurnable);
 
-        // for(let i:number = iteratorResource + 1; i <= iteratorResource + tokenAddresses.length; i++) {
-        //     await DAO.newSetResourceRequest(erc20HandlerAddress, resourceIds[i - iteratorResource - 1].resourceId, tokenAddresses[i - iteratorResource - 1].tokenAddress);
-        //     await Helpers.delay(4000);
-        //     console.info(`${resourceIds[i - iteratorResource - 1].tokenName} - ${resourceIds[i - iteratorResource - 1].resourceId} - ${await DAO.getSetResourceRequestCount()}`)
-        // }
+        for(let i:number = iteratorResource + 1; i <= iteratorResource + tokenAddresses.length; i++) {
+            await DAO.newSetResourceRequest(erc20HandlerAddress, resourceIds[i - iteratorResource - 1].resourceId, tokenAddresses[i - iteratorResource - 1].tokenAddress);
+            await Helpers.delay(4000);
+            console.info(`${resourceIds[i - iteratorResource - 1].tokenName} - ${resourceIds[i - iteratorResource - 1].resourceId} - ${await DAO.getSetResourceRequestCount()}`)
+        }
 
         // for(let i:number = iteratorResource; i <= (await DAO.getSetResourceRequestCount()); i++) {
         //     await bridge.adminSetResource(i);    

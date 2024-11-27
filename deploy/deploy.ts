@@ -245,7 +245,7 @@ task("deploy-sub-tokens", "Deploying sub tokens for our chain")
         const erc20CustomFactory = await ethers.getContractFactory("ERC20CustomPermit", signer);
         const erc20BtcFactory = await ethers.getContractFactory("ERC20BtcPermit", signer);
 
-        const usdt = await ethers.getContractAt("ERC20Stable", "0x97FDd294024f50c388e39e73F1705a35cfE87656", signer)
+        const usdt = await ethers.getContractAt("ERC20Stable", "0xCB743D15F88789498A6dA9C6438FBAd9D7befae7", signer)
         const minterRole = await usdt.MINTER_ROLE();
         const adminRole = await usdt.DEFAULT_ADMIN_ROLE();
         // console.log(await usdt.getRoleMemberCount(adminRole))
@@ -344,4 +344,8 @@ task("deploy-sub-tokens", "Deploying sub tokens for our chain")
         // const akasha = await (await erc20CustomFactory.deploy("Akashalife", "AK1111")).deployed();
         // await akasha.grantRole(minterRole, taskArgs.erc20Handler);
         // console.log(`AK1111: \u001b[1;34m${akasha.address}\u001b[0m`);
+
+        // const mooDeng = await (await erc20CustomFactory.deploy("Moo Deng", "MOODENG")).deployed();
+        // await mooDeng.grantRole(minterRole, taskArgs.erc20Handler);
+        // console.log(`MOODENG: \u001b[1;34m${mooDeng.address}\u001b[0m`);
     });
