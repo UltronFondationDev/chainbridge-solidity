@@ -8,6 +8,7 @@ const Ethers = require('ethers');
 
 const Helpers = require('../../helpers');
 
+const DAOContract = artifacts.require("DAO");
 const BridgeContract = artifacts.require("Bridge");
 const CentrifugeAssetContract = artifacts.require("CentrifugeAsset");
 const GenericHandlerContract = artifacts.require("GenericHandler");
@@ -21,11 +22,17 @@ contract('GenericHandler - [Execute Proposal]', async (accounts) => {
     const relayer1Address = accounts[2];
     const relayer2Address = accounts[3];
 
+    const someAddress = "0xcafecafecafecafecafecafecafecafecafecafe";
+
     const initialRelayers = [relayer1Address, relayer2Address];
 
     const centrifugeAssetMinCount = 10;
     const hashOfCentrifugeAsset = Ethers.utils.keccak256('0xc0ffee');
 
+    const feeMaxValue = 10000;
+    const feePercent = 10;
+
+    let DAOInstance;
     let BridgeInstance;
     let CentrifugeAssetInstance;
     let initialResourceIDs;
@@ -39,9 +46,12 @@ contract('GenericHandler - [Execute Proposal]', async (accounts) => {
 
     beforeEach(async () => {
         await Promise.all([
-            BridgeContract.new(domainID, initialRelayers, relayerThreshold, 0, 100).then(instance => BridgeInstance = instance),
+            BridgeContract.new(domainID, initialRelayers, relayerThreshold, 100, feeMaxValue, feePercent).then(instance => BridgeInstance = instance),
             CentrifugeAssetContract.new(centrifugeAssetMinCount).then(instance => CentrifugeAssetInstance = instance)
         ]);
+
+        DAOInstance = await DAOContract.new(BridgeInstance.address, someAddress);
+        await BridgeInstance.setDAOContractInitial(DAOInstance.address);
 
         const centrifugeAssetFuncSig = Helpers.getFunctionSignature(CentrifugeAssetInstance, 'store');
 
@@ -55,7 +65,8 @@ contract('GenericHandler - [Execute Proposal]', async (accounts) => {
         GenericHandlerInstance = await GenericHandlerContract.new(
             BridgeInstance.address);
 
-        await BridgeInstance.adminSetGenericResource(GenericHandlerInstance.address, resourceID,  initialContractAddresses[0], initialDepositFunctionSignatures[0], initialDepositFunctionDepositerOffsets[0], initialExecuteFunctionSignatures[0]);
+        await DAOInstance.newSetGenericResourceRequest(GenericHandlerInstance.address, resourceID,  initialContractAddresses[0], initialDepositFunctionSignatures[0], initialDepositFunctionDepositerOffsets[0], initialExecuteFunctionSignatures[0]);
+        await BridgeInstance.adminSetGenericResource(1);
 
         depositData = Helpers.createGenericDepositData(hashOfCentrifugeAsset);
         depositProposalDataHash = Ethers.utils.keccak256(GenericHandlerInstance.address + depositData.substr(2));
@@ -72,6 +83,7 @@ contract('GenericHandler - [Execute Proposal]', async (accounts) => {
         // relayer1 creates the deposit proposal
         await TruffleAssert.passes(BridgeInstance.voteProposal(
             domainID,
+            domainID,
             expectedDepositNonce,
             resourceID,
             depositData,
@@ -83,6 +95,7 @@ contract('GenericHandler - [Execute Proposal]', async (accounts) => {
         // into a finalized state
         // and then automatically executes the proposal
         await TruffleAssert.passes(BridgeInstance.voteProposal(
+            domainID,
             domainID,
             expectedDepositNonce,
             resourceID,
@@ -105,6 +118,7 @@ contract('GenericHandler - [Execute Proposal]', async (accounts) => {
         // relayer1 creates the deposit proposal
         await TruffleAssert.passes(BridgeInstance.voteProposal(
             domainID,
+            domainID,
             expectedDepositNonce,
             resourceID,
             depositData,
@@ -116,6 +130,7 @@ contract('GenericHandler - [Execute Proposal]', async (accounts) => {
         // into a finalized state
         // and then automatically executes the proposal
         const voteWithExecuteTx = await BridgeInstance.voteProposal(
+            domainID,
             domainID,
             expectedDepositNonce,
             resourceID,

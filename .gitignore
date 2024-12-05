@@ -10,3 +10,9 @@ src/ethers
 src/web3
 ganache-cli/
 dist/
+typechain/
+typechain-types/
+cache/
+artifacts/
+.env
+.deps/

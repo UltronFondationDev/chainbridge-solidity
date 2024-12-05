@@ -8,6 +8,7 @@ const Ethers = require('ethers');
 
 const Helpers = require('../../helpers');
 
+const DAOContract = artifacts.require("DAO");
 const BridgeContract = artifacts.require("Bridge");
 const GenericHandlerContract = artifacts.require("GenericHandler");
 const CentrifugeAssetContract = artifacts.require("CentrifugeAsset");
@@ -20,6 +21,12 @@ contract('GenericHandler - [constructor]', async () => {
     const blankFunctionDepositerOffset = 0;
     const centrifugeAssetStoreFuncSig = 'store(bytes32)';
 
+    const feeMaxValue = 10000;
+    const feePercent = 10;
+
+    const someAddress = "0xcafecafecafecafecafecafecafecafecafecafe";
+
+    let DAOInstance;
     let BridgeInstance;
     let CentrifugeAssetInstance1;
     let CentrifugeAssetInstance2;
@@ -32,11 +39,14 @@ contract('GenericHandler - [constructor]', async () => {
 
     beforeEach(async () => {
         await Promise.all([
-            BridgeContract.new(domainID, [], relayerThreshold, 0, 100).then(instance => BridgeInstance = instance),
+            BridgeContract.new(domainID, [], relayerThreshold, 100, feeMaxValue, feePercent).then(instance => BridgeInstance = instance),
             CentrifugeAssetContract.new(centrifugeAssetMinCount).then(instance => CentrifugeAssetInstance1 = instance),
             CentrifugeAssetContract.new(centrifugeAssetMinCount).then(instance => CentrifugeAssetInstance2 = instance),
             CentrifugeAssetContract.new(centrifugeAssetMinCount).then(instance => CentrifugeAssetInstance3 = instance)
         ]);
+
+        DAOInstance = await DAOContract.new(BridgeInstance.address, someAddress);
+        await BridgeInstance.setDAOContractInitial(DAOInstance.address);
 
         initialResourceIDs = [
             Helpers.createResourceID(CentrifugeAssetInstance1.address, domainID),
@@ -63,7 +73,8 @@ contract('GenericHandler - [constructor]', async () => {
             BridgeInstance.address);
 
         for (let i = 0; i < initialResourceIDs.length; i++) {
-            await BridgeInstance.adminSetGenericResource(GenericHandlerInstance.address, initialResourceIDs[i], initialContractAddresses[i], initialDepositFunctionSignatures[i], initialDepositFunctionDepositerOffsets[i], initialExecuteFunctionSignatures[i]);
+            await DAOInstance.newSetGenericResourceRequest(GenericHandlerInstance.address, initialResourceIDs[i], initialContractAddresses[i], initialDepositFunctionSignatures[i], initialDepositFunctionDepositerOffsets[i], initialExecuteFunctionSignatures[i]);
+            await BridgeInstance.adminSetGenericResource(i+1);
         }
         
         for (let i = 0; i < initialResourceIDs.length; i++) {

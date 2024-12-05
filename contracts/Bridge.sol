@@ -8,13 +8,15 @@ import "./utils/SafeMath.sol";
 import "./utils/SafeCast.sol";
 import "./interfaces/IDepositExecute.sol";
 import "./interfaces/IERCHandler.sol";
+import "./interfaces/IBridge.sol";
 import "./interfaces/IGenericHandler.sol";
+import "./DAO.sol";
 
 /**
     @title Facilitates deposits, creation and voting of deposit proposals, and deposit executions.
     @author ChainSafe Systems.
  */
-contract Bridge is Pausable, AccessControl, SafeMath {
+contract Bridge is IBridge, Pausable, AccessControl, SafeMath {
     using SafeCast for *;
 
     // Limit relayers number because proposal can fit only so much votes
@@ -22,8 +24,11 @@ contract Bridge is Pausable, AccessControl, SafeMath {
 
     uint8   public _domainID;
     uint8   public _relayerThreshold;
-    uint128 public _fee;
     uint40  public _expiry;
+    uint128 private feeMaxValue; /// @notice e.g. 10000 = 100% => 1(feePercent) = 0.01% 
+    uint64 private feePercent;
+
+    IDAO private contractDAO;
 
     enum ProposalStatus {Inactive, Active, Passed, Executed, Cancelled}
 
@@ -34,6 +39,12 @@ contract Bridge is Pausable, AccessControl, SafeMath {
         uint40  _proposedBlock; // 1099511627775 maximum block
     }
 
+    struct Fee { 
+        uint256 basicFee;
+        uint256 minAmount;
+        uint256 maxAmount;
+    }
+
     // destinationDomainID => number of deposits
     mapping(uint8 => uint64) public _depositCounts;
     // resourceID => handler address
@@ -42,6 +53,8 @@ contract Bridge is Pausable, AccessControl, SafeMath {
     mapping(address => bool) public isValidForwarder;
     // destinationDomainID + depositNonce => dataHash => Proposal
     mapping(uint72 => mapping(bytes32 => Proposal)) private _proposals;
+    // to be bridged token address => destination chain id => Fee
+    mapping(address => mapping(uint8 => Fee)) private _fees;
 
     event RelayerThresholdChanged(uint256 newThreshold);
     event RelayerAdded(address relayer);
@@ -72,29 +85,41 @@ contract Bridge is Pausable, AccessControl, SafeMath {
 
     bytes32 public constant RELAYER_ROLE = keccak256("RELAYER_ROLE");
 
-    modifier onlyAdmin() {
-        _onlyAdmin();
-        _;
-    }
-
-    modifier onlyAdminOrRelayer() {
-        _onlyAdminOrRelayer();
-        _;
-    }
-
     modifier onlyRelayers() {
         _onlyRelayers();
         _;
     }
 
-    function _onlyAdminOrRelayer() private view {
-        address sender = _msgSender();
-        require(hasRole(DEFAULT_ADMIN_ROLE, sender) || hasRole(RELAYER_ROLE, sender),
-            "sender is not relayer or admin");
+    function getFeeMaxValue() external override view returns(uint128) {
+        return feeMaxValue;
     }
 
-    function _onlyAdmin() private view {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "sender doesn't have admin role");
+    function getFeePercent() external override view returns(uint64) {
+        return feePercent;
+    }
+
+    function getContractDAO() external view returns(IDAO) {
+        return contractDAO;
+    }
+
+    function getFee(address tokenAddress, uint8 chainId) external override view returns(uint256, uint256, uint256) {
+        require(tokenAddress != address(0), "zero address");
+        require(_fees[tokenAddress][chainId].basicFee >= 0 
+            && _fees[tokenAddress][chainId].minAmount > 0 
+            && _fees[tokenAddress][chainId].maxAmount > 0, "fee does not exist");
+        return (_fees[tokenAddress][chainId].basicFee,
+                _fees[tokenAddress][chainId].minAmount,
+                _fees[tokenAddress][chainId].maxAmount);
+    }
+
+    /**
+        @notice Sets DAO contract address only once
+        @param _address The DAO address
+     */
+    function setDAOContractInitial(address _address) external {
+        require(address(contractDAO) == address(0), "already set");
+        require(_address != address(0), "zero address");
+        contractDAO = IDAO(_address);
     }
 
     function _onlyRelayers() private view {
@@ -125,12 +150,15 @@ contract Bridge is Pausable, AccessControl, SafeMath {
         @param domainID ID of chain the Bridge contract exists on.
         @param initialRelayers Addresses that should be initially granted the relayer role.
         @param initialRelayerThreshold Number of votes needed for a deposit proposal to be considered passed.
+        @param _feeMaxValue The maximum number of percent. This value will be used as divisor(100% value)
+        @param _feePercent The value of percent fee, which is used as multiplier (n * multiplier / delimeter = 10 * 30 / 100)
      */
-    constructor (uint8 domainID, address[] memory initialRelayers, uint256 initialRelayerThreshold, uint256 fee, uint256 expiry) public {
+    constructor (uint8 domainID, address[] memory initialRelayers, uint256 initialRelayerThreshold, uint256 expiry, uint256 _feeMaxValue, uint256 _feePercent) public {
         _domainID = domainID;
         _relayerThreshold = initialRelayerThreshold.toUint8();
-        _fee = fee.toUint128();
         _expiry = expiry.toUint40();
+        feeMaxValue= _feeMaxValue.toUint128();
+        feePercent = _feePercent.toUint64();
 
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
 
@@ -160,41 +188,51 @@ contract Bridge is Pausable, AccessControl, SafeMath {
 
     /**
         @notice Removes admin role from {_msgSender()} and grants it to {newAdmin}.
-        @notice Only callable by an address that currently has the admin role.
-        @param newAdmin Address that admin role will be granted to.
+        @notice Only callable by DAO vote
+        @param id The id of request with new Admin address
      */
-    function renounceAdmin(address newAdmin) external onlyAdmin {
+    function renounceAdmin(uint256 id) external {
+        address ownerAddress = contractDAO.isOwnerChangeAvailable(id);
+
         address sender = _msgSender();
-        require(sender != newAdmin, 'Cannot renounce oneself');
-        grantRole(DEFAULT_ADMIN_ROLE, newAdmin);
+        require(sender != ownerAddress, 'cannot renounce oneself');
+        grantRole(DEFAULT_ADMIN_ROLE, ownerAddress);
         renounceRole(DEFAULT_ADMIN_ROLE, sender);
+
+        require(contractDAO.confirmOwnerChangeRequest(id), "confirmed");
     }
 
     /**
         @notice Pauses deposits, proposal creation and voting, and deposit executions.
-        @notice Only callable by an address that currently has the admin role.
+        @notice Only callable by DAO voting result.
+        @param id The id of request with new Pause status
      */
-    function adminPauseTransfers() external onlyAdmin {
-        _pause(_msgSender());
-    }
+    function adminPauseStatusTransfers(uint256 id) external {
+        bool pauseStatus = contractDAO.isPauseStatusAvailable(id);
 
-    /**
-        @notice Unpauses deposits, proposal creation and voting, and deposit executions.
-        @notice Only callable by an address that currently has the admin role.
-     */
-    function adminUnpauseTransfers() external onlyAdmin {
-        _unpause(_msgSender());
+        if(pauseStatus) {
+            _pause(_msgSender());
+        }
+        else {
+            _unpause(_msgSender());
+        }
+
+        require(contractDAO.confirmPauseStatusRequest(id), "confirmed");
     }
 
     /**
         @notice Modifies the number of votes required for a proposal to be considered passed.
         @notice Only callable by an address that currently has the admin role.
-        @param newThreshold Value {_relayerThreshold} will be changed to.
+        @param id The id of request with new Relayer threshold value
         @notice Emits {RelayerThresholdChanged} event.
      */
-    function adminChangeRelayerThreshold(uint256 newThreshold) external onlyAdmin {
+    function adminChangeRelayerThreshold(uint256 id) external {
+        uint256 newThreshold = contractDAO.isChangeRelayerThresholdAvailable(id);
+
         _relayerThreshold = newThreshold.toUint8();
         emit RelayerThresholdChanged(newThreshold);
+
+        require(contractDAO.confirmChangeRelayerThresholdRequest(id), "confirmed");
     }
 
     /**
@@ -228,67 +266,78 @@ contract Bridge is Pausable, AccessControl, SafeMath {
         @notice Sets a new resource for handler contracts that use the IERCHandler interface,
         and maps the {handlerAddress} to {resourceID} in {_resourceIDToHandlerAddress}.
         @notice Only callable by an address that currently has the admin role.
-        @param handlerAddress Address of handler resource will be set for.
-        @param resourceID ResourceID to be used when making deposits.
-        @param tokenAddress Address of contract to be called when a deposit is made and a deposited is executed.
+        @param id The id of request with new set resource values
      */
-    function adminSetResource(address handlerAddress, bytes32 resourceID, address tokenAddress) external onlyAdmin {
-        _resourceIDToHandlerAddress[resourceID] = handlerAddress;
+    function adminSetResource(uint256 id) external {
+        (address handlerAddress, bytes32 resourceId, address tokenAddress) = contractDAO.isSetResourceAvailable(id);
+
+        _resourceIDToHandlerAddress[resourceId] = handlerAddress;
         IERCHandler handler = IERCHandler(handlerAddress);
-        handler.setResource(resourceID, tokenAddress);
+        handler.setResource(resourceId, tokenAddress);
+
+        require(contractDAO.confirmSetResourceRequest(id), "confirmed");
     }
 
     /**
         @notice Sets a new resource for handler contracts that use the IGenericHandler interface,
         and maps the {handlerAddress} to {resourceID} in {_resourceIDToHandlerAddress}.
         @notice Only callable by an address that currently has the admin role.
-        @param handlerAddress Address of handler resource will be set for.
-        @param resourceID ResourceID to be used when making deposits.
-        @param contractAddress Address of contract to be called when a deposit is made and a deposited is executed.
+        @param id The id of request with new set generic resource values
      */
-    function adminSetGenericResource(
-        address handlerAddress,
-        bytes32 resourceID,
+    function adminSetGenericResource(uint256 id) external {
+        (address handlerAddress,
+        bytes32 resourceId,
         address contractAddress,
         bytes4 depositFunctionSig,
         uint256 depositFunctionDepositerOffset,
-        bytes4 executeFunctionSig
-    ) external onlyAdmin {
-        _resourceIDToHandlerAddress[resourceID] = handlerAddress;
+        bytes4 executeFunctionSig) = contractDAO.isSetGenericResourceAvailable(id);
+
+        _resourceIDToHandlerAddress[resourceId] = handlerAddress;
         IGenericHandler handler = IGenericHandler(handlerAddress);
-        handler.setResource(resourceID, contractAddress, depositFunctionSig, depositFunctionDepositerOffset, executeFunctionSig);
+        handler.setResource(resourceId, contractAddress, depositFunctionSig, depositFunctionDepositerOffset, executeFunctionSig);
+
+        require(contractDAO.confirmSetGenericResourceRequest(id), "confirmed");
     }
 
     /**
         @notice Sets a resource as burnable for handler contracts that use the IERCHandler interface.
         @notice Only callable by an address that currently has the admin role.
-        @param handlerAddress Address of handler resource will be set for.
-        @param tokenAddress Address of contract to be called when a deposit is made and a deposited is executed.
+        @param id The id of request with new set burnable values
      */
-    function adminSetBurnable(address handlerAddress, address tokenAddress) external onlyAdmin {
+    function adminSetBurnable(uint256 id) external {
+        (address handlerAddress, address tokenAddress) = contractDAO.isSetBurnableAvailable(id);
+
         IERCHandler handler = IERCHandler(handlerAddress);
         handler.setBurnable(tokenAddress);
+
+        require(contractDAO.confirmSetBurnableRequest(id), "confirmed");
     }
 
     /**
-        @notice Sets the nonce for the specific domainID.
+        @notice Sets the nonce for the specific domainId.
         @notice Only callable by an address that currently has the admin role.
-        @param domainID Domain ID for increasing nonce.
-        @param nonce The nonce value to be set.
+        @param id The id of request with new set deposit nonce values
      */
-    function adminSetDepositNonce(uint8 domainID, uint64 nonce) external onlyAdmin {
-        require(nonce > _depositCounts[domainID], "Does not allow decrements of the nonce");
-        _depositCounts[domainID] = nonce;
+    function adminSetDepositNonce(uint256 id) external {
+        (uint8 domainId, uint64 nonce) = contractDAO.isSetNonceAvailable(id);
+
+        require(nonce > _depositCounts[domainId], "Does not allow decrements of the nonce");
+        _depositCounts[domainId] = nonce;
+
+        require(contractDAO.confirmSetNonceRequest(id), "confirmed");
     }
 
     /**
         @notice Set a forwarder to be used.
         @notice Only callable by an address that currently has the admin role.
-        @param forwarder Forwarder address to be added.
-        @param valid Decision for the specific forwarder.
+        @param id The id of request with new set forwarder values
      */
-    function adminSetForwarder(address forwarder, bool valid) external onlyAdmin {
+    function adminSetForwarder(uint256 id) external {
+        (address forwarder, bool valid) = contractDAO.isSetForwarderAvailable(id);
+
         isValidForwarder[forwarder] = valid;
+
+        require(contractDAO.confirmSetForwarderRequest(id), "confirmed");
     }
 
     /**
@@ -316,26 +365,52 @@ contract Bridge is Pausable, AccessControl, SafeMath {
     }
 
     /**
+        @notice Changes deposit fee percent.
+        @notice Only callable by admin.
+        @param id The id of request with new fee percent values
+     */
+    function adminChangeFeePercent(uint256 id) external {
+        (uint128 newFeeMaxValue, uint64 newFeePercent) = contractDAO.isChangeFeePercentAvailable(id);
+        
+        require(feeMaxValue != newFeeMaxValue && feePercent != newFeePercent, "Current fee percent values = new fee percent");
+        require(newFeePercent <= newFeeMaxValue, "new feePercent >= new feeMaxValue");
+        
+        feeMaxValue = newFeeMaxValue;
+        feePercent = newFeePercent;
+
+        require(contractDAO.confirmChangeFeePercentRequest(id), "confirmed");
+    } 
+
+    /**
         @notice Changes deposit fee.
         @notice Only callable by admin.
-        @param newFee Value {_fee} will be updated to.
+        @param id The id of request with new fee value
      */
-    function adminChangeFee(uint256 newFee) external onlyAdmin {
-        require(_fee != newFee, "Current fee is equal to new fee");
-        _fee = newFee.toUint128();
+    function adminChangeFee(uint256 id) external {
+        (address tokenAddress, uint8 chainId, uint256 basicFee, uint256 minAmount, uint256 maxAmount) = contractDAO.isChangeFeeAvailable(id);
+
+        require((_fees[tokenAddress][chainId].basicFee != basicFee || _fees[tokenAddress][chainId].basicFee == 0)
+            && _fees[tokenAddress][chainId].minAmount != minAmount 
+            && _fees[tokenAddress][chainId].maxAmount != maxAmount, "Current fee = new fee");
+
+        _fees[tokenAddress][chainId].basicFee = basicFee;
+        _fees[tokenAddress][chainId].minAmount = minAmount;
+        _fees[tokenAddress][chainId].maxAmount = maxAmount;
+
+        require(contractDAO.confirmChangeFeeRequest(id), "confirmed");
     }
 
     /**
         @notice Used to manually withdraw funds from ERC safes.
-        @param handlerAddress Address of handler to withdraw from.
-        @param data ABI-encoded withdrawal params relevant to the specified handler.
+        @param id The id of request with new withdraw values
      */
-    function adminWithdraw(
-        address handlerAddress,
-        bytes memory data
-    ) external onlyAdmin {
+    function adminWithdraw(uint256 id) external {
+        (address handlerAddress, bytes memory data) = contractDAO.isWithdrawAvailable(id);
+        
         IERCHandler handler = IERCHandler(handlerAddress);
         handler.withdraw(data);
+
+        require(contractDAO.confirmWithdrawRequest(id), "confirmed");
     }
 
     /**
@@ -350,8 +425,6 @@ contract Bridge is Pausable, AccessControl, SafeMath {
         - GenericHandler: responds with the raw bytes returned from the call to the target contract.
      */
     function deposit(uint8 destinationDomainID, bytes32 resourceID, bytes calldata data) external payable whenNotPaused {
-        require(msg.value == _fee, "Incorrect fee supplied");
-
         address handler = _resourceIDToHandlerAddress[resourceID];
         require(handler != address(0), "resourceID not mapped to handler");
 
@@ -359,7 +432,7 @@ contract Bridge is Pausable, AccessControl, SafeMath {
         address sender = _msgSender();
 
         IDepositExecute depositHandler = IDepositExecute(handler);
-        bytes memory handlerResponse = depositHandler.deposit(resourceID, sender, data);
+        bytes memory handlerResponse = depositHandler.deposit(destinationDomainID, resourceID, sender, data);
 
         emit Deposit(destinationDomainID, resourceID, depositNonce, sender, data, handlerResponse);
     }
@@ -367,15 +440,17 @@ contract Bridge is Pausable, AccessControl, SafeMath {
     /**
         @notice When called, {_msgSender()} will be marked as voting in favor of proposal.
         @notice Only callable by relayers when Bridge is not paused.
+        @param destinationDomainID ID of chain deposit will be bridged to.
         @param domainID ID of chain deposit originated from.
         @param depositNonce ID of deposited generated by origin Bridge contract.
+        @param resourceID ResourceID used to find address of handler to be used for deposit.
         @param data Data originally provided when deposit was made.
         @notice Proposal must not have already been passed or executed.
         @notice {_msgSender()} must not have already voted on proposal.
         @notice Emits {ProposalEvent} event with status indicating the proposal status.
         @notice Emits {ProposalVote} event.
      */
-    function voteProposal(uint8 domainID, uint64 depositNonce, bytes32 resourceID, bytes calldata data) external onlyRelayers whenNotPaused {
+    function voteProposal(uint8 destinationDomainID, uint8 domainID, uint64 depositNonce, bytes32 resourceID, bytes calldata data) external onlyRelayers whenNotPaused {
         address handler = _resourceIDToHandlerAddress[resourceID];
         uint72 nonceAndID = (uint72(depositNonce) << 8) | uint72(domainID);
         bytes32 dataHash = keccak256(abi.encodePacked(handler, data));
@@ -384,7 +459,7 @@ contract Bridge is Pausable, AccessControl, SafeMath {
         require(_resourceIDToHandlerAddress[resourceID] != address(0), "no handler for resourceID");
 
         if (proposal._status == ProposalStatus.Passed) {
-            executeProposal(domainID, depositNonce, data, resourceID, true);
+            executeProposal(destinationDomainID, domainID, depositNonce, data, resourceID, true);
             return;
         }
 
@@ -425,7 +500,7 @@ contract Bridge is Pausable, AccessControl, SafeMath {
         _proposals[nonceAndID][dataHash] = proposal;
 
         if (proposal._status == ProposalStatus.Passed) {
-            executeProposal(domainID, depositNonce, data, resourceID, false);
+            executeProposal(destinationDomainID, domainID, depositNonce, data, resourceID, false);
         }
     }
 
@@ -438,7 +513,7 @@ contract Bridge is Pausable, AccessControl, SafeMath {
         @notice Proposal must be past expiry threshold.
         @notice Emits {ProposalEvent} event with status {Cancelled}.
      */
-    function cancelProposal(uint8 domainID, uint64 depositNonce, bytes32 dataHash) public onlyAdminOrRelayer {
+    function cancelProposal(uint8 domainID, uint64 depositNonce, bytes32 dataHash) public onlyRelayers {
         uint72 nonceAndID = (uint72(depositNonce) << 8) | uint72(domainID);
         Proposal memory proposal = _proposals[nonceAndID][dataHash];
         ProposalStatus currentStatus = proposal._status;
@@ -456,6 +531,7 @@ contract Bridge is Pausable, AccessControl, SafeMath {
     /**
         @notice Executes a deposit proposal that is considered passed using a specified handler contract.
         @notice Only callable by relayers when Bridge is not paused.
+        @param destinationDomainID ID of chain deposit will be bridged to.
         @param domainID ID of chain deposit originated from.
         @param resourceID ResourceID to be used when making deposits.
         @param depositNonce ID of deposited generated by origin Bridge contract.
@@ -466,21 +542,18 @@ contract Bridge is Pausable, AccessControl, SafeMath {
         @notice Emits {ProposalEvent} event with status {Executed}.
         @notice Emits {FailedExecution} event with the failed reason.
      */
-    function executeProposal(uint8 domainID, uint64 depositNonce, bytes calldata data, bytes32 resourceID, bool revertOnFail) public onlyRelayers whenNotPaused {
+    function executeProposal(uint8 destinationDomainID, uint8 domainID, uint64 depositNonce, bytes calldata data, bytes32 resourceID, bool revertOnFail) public onlyRelayers whenNotPaused {
         address handler = _resourceIDToHandlerAddress[resourceID];
         uint72 nonceAndID = (uint72(depositNonce) << 8) | uint72(domainID);
         bytes32 dataHash = keccak256(abi.encodePacked(handler, data));
         Proposal storage proposal = _proposals[nonceAndID][dataHash];
-
         require(proposal._status == ProposalStatus.Passed, "Proposal must have Passed status");
-
         proposal._status = ProposalStatus.Executed;
         IDepositExecute depositHandler = IDepositExecute(handler);
-
         if (revertOnFail) {
-            depositHandler.executeProposal(resourceID, data);
+            depositHandler.executeProposal(destinationDomainID, resourceID, data);
         } else {
-            try depositHandler.executeProposal(resourceID, data) {
+            try depositHandler.executeProposal(destinationDomainID, resourceID, data) {
             } catch (bytes memory lowLevelData) {
                 proposal._status = ProposalStatus.Passed;
                 emit FailedHandlerExecution(lowLevelData);
@@ -494,12 +567,15 @@ contract Bridge is Pausable, AccessControl, SafeMath {
     /**
         @notice Transfers eth in the contract to the specified addresses. The parameters addrs and amounts are mapped 1-1.
         This means that the address at index 0 for addrs will receive the amount (in WEI) from amounts at index 0.
-        @param addrs Array of addresses to transfer {amounts} to.
-        @param amounts Array of amonuts to transfer to {addrs}.
+        @param id The id of request with new transfer values
      */
-    function transferFunds(address payable[] calldata addrs, uint[] calldata amounts) external onlyAdmin {
+    function transferFunds(uint256 id) external {
+        (address payable[] memory addrs, uint[] memory amounts) = contractDAO.isTransferAvailable(id);
+
         for (uint256 i = 0; i < addrs.length; i++) {
             addrs[i].transfer(amounts[i]);
         }
+
+        require(contractDAO.confirmTransferRequest(id), "confirmed");
     }
 }

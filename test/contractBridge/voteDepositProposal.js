@@ -8,6 +8,7 @@ const Ethers = require('ethers');
 
 const Helpers = require('../helpers');
 
+const DAOContract = artifacts.require("DAO");
 const BridgeContract = artifacts.require("Bridge");
 const ERC20MintableContract = artifacts.require("ERC20PresetMinterPauser");
 const ERC20HandlerContract = artifacts.require("ERC20Handler");
@@ -24,11 +25,20 @@ contract('Bridge - [voteProposal with relayerThreshold == 3]', async (accounts) 
     const relayer3Bit = 1 << 2;
     const depositerAddress = accounts[4];
     const destinationChainRecipientAddress = accounts[4];
-    const depositAmount = 10;
+    const depositAmount = Ethers.utils.parseUnits("10", 6);
     const expectedDepositNonce = 1;
     const relayerThreshold = 3;
     const expectedFinalizedEventStatus = 2;
     const expectedExecutedEventStatus = 3;
+
+    const someAddress = "0xcafecafecafecafecafecafecafecafecafecafe";
+
+    const feeMaxValue = 10000;
+    const feePercent = 10;
+
+    const basicFee = Ethers.utils.parseUnits("0.9", 6);
+    const minAmount = Ethers.utils.parseUnits("10", 6);
+    const maxAmount = Ethers.utils.parseUnits("1000000", 6);
 
     const STATUS = {
         Inactive : '0',
@@ -38,6 +48,7 @@ contract('Bridge - [voteProposal with relayerThreshold == 3]', async (accounts) 
         Cancelled : '4'
     }
 
+    let DAOInstance;
     let BridgeInstance;
     let DestinationERC20MintableInstance;
     let DestinationERC20HandlerInstance;
@@ -52,41 +63,58 @@ contract('Bridge - [voteProposal with relayerThreshold == 3]', async (accounts) 
 
     beforeEach(async () => {
         await Promise.all([
-            BridgeContract.new(destinationDomainID, [
+            BridgeContract.new(originDomainID, [
                 relayer1Address,
                 relayer2Address,
                 relayer3Address,
                 relayer4Address], 
                 relayerThreshold, 
-                0,
-                100,).then(instance => BridgeInstance = instance),
+                100,
+                feeMaxValue,
+                feePercent).then(instance => BridgeInstance = instance),
             ERC20MintableContract.new("token", "TOK").then(instance => DestinationERC20MintableInstance = instance)
         ]);
+
+        DAOInstance = await DAOContract.new(BridgeInstance.address, someAddress);
+        await BridgeInstance.setDAOContractInitial(DAOInstance.address);
         
         resourceID = Helpers.createResourceID(DestinationERC20MintableInstance.address, originDomainID);
         initialResourceIDs = [resourceID];
         initialContractAddresses = [DestinationERC20MintableInstance.address];
         burnableContractAddresses = [DestinationERC20MintableInstance.address];
 
-        DestinationERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address);
+        DestinationERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address, someAddress);
+        await DestinationERC20HandlerInstance.setDAOContractInitial(DAOInstance.address);
 
-        await TruffleAssert.passes(BridgeInstance.adminSetResource(DestinationERC20HandlerInstance.address, resourceID, initialContractAddresses[0]));
-        await TruffleAssert.passes(BridgeInstance.adminSetBurnable(DestinationERC20HandlerInstance.address, burnableContractAddresses[0]));
+        await DAOInstance.newSetResourceRequest(DestinationERC20HandlerInstance.address, resourceID, initialContractAddresses[0]);
+        await DAOInstance.newSetBurnableRequest(DestinationERC20HandlerInstance.address, burnableContractAddresses[0]);
+
+        await TruffleAssert.passes(BridgeInstance.adminSetResource(1));
+        await TruffleAssert.passes(BridgeInstance.adminSetBurnable(1));
 
         depositData = Helpers.createERCDepositData(depositAmount, 20, destinationChainRecipientAddress);
         depositDataHash = Ethers.utils.keccak256(DestinationERC20HandlerInstance.address + depositData.substr(2));
 
-        await Promise.all([
-            DestinationERC20MintableInstance.grantRole(await DestinationERC20MintableInstance.MINTER_ROLE(), DestinationERC20HandlerInstance.address),
-            BridgeInstance.adminSetResource(DestinationERC20HandlerInstance.address, resourceID, DestinationERC20MintableInstance.address)
-        ]);
+        await DestinationERC20MintableInstance.grantRole(await DestinationERC20MintableInstance.MINTER_ROLE(), DestinationERC20HandlerInstance.address);
+        await DAOInstance.newSetResourceRequest(DestinationERC20HandlerInstance.address, resourceID, DestinationERC20MintableInstance.address);
+        await BridgeInstance.adminSetResource(2);
 
-        vote = (relayer) => BridgeInstance.voteProposal(originDomainID, expectedDepositNonce, resourceID, depositData, { from: relayer });
-        executeProposal = (relayer) => BridgeInstance.executeProposal(originDomainID, expectedDepositNonce, depositData, resourceID, { from: relayer });
+        await DAOInstance.newChangeFeeRequest(DestinationERC20MintableInstance.address, destinationDomainID, basicFee, minAmount, maxAmount);
+        await BridgeInstance.adminChangeFee(1);
+
+        const etherTransfer = Ethers.utils.parseUnits("1.0", 18);
+        await web3.eth.sendTransaction({
+            from: relayer1Address,
+            to: DestinationERC20HandlerInstance.address,
+            value: etherTransfer
+        });
+
+        vote = (relayer) => BridgeInstance.voteProposal(destinationDomainID, originDomainID, expectedDepositNonce, resourceID, depositData, { from: relayer });
+        executeProposal = (relayer) => BridgeInstance.executeProposal(destinationDomainID, originDomainID, expectedDepositNonce, depositData, resourceID, { from: relayer });
     });
 
     it ('[sanity] bridge configured with threshold and relayers', async () => {
-        assert.equal(await BridgeInstance._domainID(), destinationDomainID)
+        assert.equal(await BridgeInstance._domainID(), originDomainID)
 
         assert.equal(await BridgeInstance._relayerThreshold(), relayerThreshold)
 
@@ -146,7 +174,7 @@ contract('Bridge - [voteProposal with relayerThreshold == 3]', async (accounts) 
 
         await TruffleAssert.passes(
             BridgeInstance.voteProposal(
-                originDomainID, expectedDepositNonce,
+                destinationDomainID, originDomainID, expectedDepositNonce,
                 resourceID, Ethers.utils.keccak256(depositDataHash),
                 { from: relayer2Address }));
     });
@@ -232,10 +260,10 @@ contract('Bridge - [voteProposal with relayerThreshold == 3]', async (accounts) 
     });
 
     it('Execution requires active proposal', async () => {
-        await TruffleAssert.reverts(BridgeInstance.executeProposal(originDomainID, expectedDepositNonce, depositData, '0x0', { from: relayer1Address }), "Proposal must have Passed status");
+        await TruffleAssert.reverts(BridgeInstance.executeProposal(destinationDomainID, originDomainID, expectedDepositNonce, depositData, '0x0', { from: relayer1Address }), "Proposal must have Passed status");
     });
 
     it('Voting requires resourceID that is mapped to a handler', async () => {
-        await TruffleAssert.reverts(BridgeInstance.voteProposal(originDomainID, expectedDepositNonce, '0x0', depositDataHash, { from: relayer1Address }), "no handler for resourceID");
+        await TruffleAssert.reverts(BridgeInstance.voteProposal(destinationDomainID, originDomainID, expectedDepositNonce, '0x0', depositDataHash, { from: relayer1Address }), "no handler for resourceID");
     });
 });

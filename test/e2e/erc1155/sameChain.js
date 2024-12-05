@@ -3,6 +3,7 @@ const Ethers = require('ethers');
 
 const Helpers = require('../../helpers');
 
+const DAOContract = artifacts.require("DAO");
 const BridgeContract = artifacts.require("Bridge");
 const ERC1155MintableContract = artifacts.require("ERC1155PresetMinterPauser");
 const ERC1155HandlerContract = artifacts.require("ERC1155Handler");
@@ -16,11 +17,17 @@ contract('E2E ERC1155 - Same Chain', async accounts => {
     const relayer1Address = accounts[3];
     const relayer2Address = accounts[4];
 
+    const someAddress = "0xcafecafecafecafecafecafecafecafecafecafe";
+
     const tokenID = 1;
     const initialTokenAmount = 100;
     const depositAmount = 10; 
     const expectedDepositNonce = 1;
+
+    const feeMaxValue = 10000;
+    const feePercent = 10;
     
+    let DAOInstance;
     let BridgeInstance;
     let ERC1155MintableInstance;
     let ERC1155HandlerInstance;
@@ -34,9 +41,12 @@ contract('E2E ERC1155 - Same Chain', async accounts => {
 
     beforeEach(async () => {
         await Promise.all([
-            BridgeContract.new(domainID, [relayer1Address, relayer2Address], relayerThreshold, 0, 100).then(instance => BridgeInstance = instance),
+            BridgeContract.new(domainID, [relayer1Address, relayer2Address], relayerThreshold, 100, feeMaxValue, feePercent).then(instance => BridgeInstance = instance),
             ERC1155MintableContract.new("TOK").then(instance => ERC1155MintableInstance = instance)
         ]);
+
+        DAOInstance = await DAOContract.new(BridgeInstance.address, someAddress);
+        await BridgeInstance.setDAOContractInitial(DAOInstance.address);
         
         resourceID = Helpers.createResourceID(ERC1155MintableInstance.address, domainID);
         initialResourceIDs = [resourceID];
@@ -45,10 +55,9 @@ contract('E2E ERC1155 - Same Chain', async accounts => {
 
         ERC1155HandlerInstance = await ERC1155HandlerContract.new(BridgeInstance.address);
 
-        await Promise.all([
-            ERC1155MintableInstance.mintBatch(depositerAddress, [tokenID], [initialTokenAmount], "0x0"),
-            BridgeInstance.adminSetResource(ERC1155HandlerInstance.address, resourceID, ERC1155MintableInstance.address)
-        ]);
+        await ERC1155MintableInstance.mintBatch(depositerAddress, [tokenID], [initialTokenAmount], "0x0");
+        await DAOInstance.newSetResourceRequest(ERC1155HandlerInstance.address, resourceID, ERC1155MintableInstance.address);
+        await BridgeInstance.adminSetResource(1);
 
         await ERC1155MintableInstance.setApprovalForAll(ERC1155HandlerInstance.address, true, { from: depositerAddress });
 
@@ -77,6 +86,7 @@ contract('E2E ERC1155 - Same Chain', async accounts => {
         // relayer1 creates the deposit proposal
         await TruffleAssert.passes(BridgeInstance.voteProposal(
             domainID,
+            domainID,
             expectedDepositNonce,
             resourceID,
             proposalData,
@@ -88,6 +98,7 @@ contract('E2E ERC1155 - Same Chain', async accounts => {
         // into a finalized state
         // and then automatically executes the proposal
         await TruffleAssert.passes(BridgeInstance.voteProposal(
+            domainID,
             domainID,
             expectedDepositNonce,
             resourceID,
@@ -105,11 +116,11 @@ contract('E2E ERC1155 - Same Chain', async accounts => {
     });
 
     it("Handler's deposit function can be called by only bridge", async () => {
-        await TruffleAssert.reverts(ERC1155HandlerInstance.deposit(resourceID, depositerAddress, depositData, { from: depositerAddress }), "sender must be bridge contract");
+        await TruffleAssert.reverts(ERC1155HandlerInstance.deposit(domainID, resourceID, depositerAddress, depositData, { from: depositerAddress }), "sender must be bridge contract");
     });
 
     it("Handler's executeProposal function can be called by only bridge", async () => {
-        await TruffleAssert.reverts(ERC1155HandlerInstance.executeProposal(resourceID, proposalData, { from: depositerAddress }), "sender must be bridge contract");
+        await TruffleAssert.reverts(ERC1155HandlerInstance.executeProposal(domainID, resourceID, proposalData, { from: depositerAddress }), "sender must be bridge contract");
     });
 
     it("Handler's withdraw function can be called by only bridge", async () => {
@@ -137,7 +148,9 @@ contract('E2E ERC1155 - Same Chain', async accounts => {
 
         withdrawData = Helpers.createERC1155WithdrawData(ERC1155MintableInstance.address, depositerAddress, [tokenID], [depositAmount], "0x");
 
-        await BridgeInstance.adminWithdraw(ERC1155HandlerInstance.address, withdrawData);
+        await DAOInstance.newWithdrawRequest(ERC1155HandlerInstance.address, withdrawData)
+
+        await BridgeInstance.adminWithdraw(1);
 
         depositerBalance = await ERC1155MintableInstance.balanceOf(depositerAddress, tokenID);
         assert.equal(depositerBalance, initialTokenAmount);

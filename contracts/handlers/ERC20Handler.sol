@@ -5,6 +5,8 @@ pragma experimental ABIEncoderV2;
 import "../interfaces/IDepositExecute.sol";
 import "./HandlerHelpers.sol";
 import "../ERC20Safe.sol";
+import "../interfaces/IBridge.sol";
+import "../interfaces/IDAO.sol";
 
 /**
     @title Handles ERC20 deposits and deposit executions.
@@ -12,16 +14,59 @@ import "../ERC20Safe.sol";
     @notice This contract is intended to be used with the Bridge contract.
  */
 contract ERC20Handler is IDepositExecute, HandlerHelpers, ERC20Safe {
+    event DepositERC20(address indexed tokenAddress, uint8 indexed destinationDomainID, address indexed sender, uint256 amount, uint256 fee, uint256 amountWithFee);
+    IBridge private contractBridge;
+    IDAO private contractDAO;
+    address private treasuryAddress;
+
     /**
         @param bridgeAddress Contract address of previously deployed Bridge.
+        @param _treasuryAddress Contract address of previously deployed Treasury.
      */
-    constructor(
-        address          bridgeAddress
-    ) public HandlerHelpers(bridgeAddress) {
+    constructor(address bridgeAddress, address _treasuryAddress) public HandlerHelpers(bridgeAddress) {
+        contractBridge = IBridge(bridgeAddress);
+        treasuryAddress = _treasuryAddress;
+    }
+
+    /**
+        @notice Gets treasury address, which will receive fee from custom bridged ERC20 tokens
+        @return Treasury address
+    */
+    function getTreasuryAddress() external view returns(address) {
+        return treasuryAddress;
+    }
+
+    /**
+        @notice Gets DAO address, which will change treasury address
+        @return DAO address
+    */
+    function getDAOAddress() external view returns(address) {
+        return address(contractDAO);
+    }
+
+    /**
+        @notice Sets DAO contract address only once
+        @param _address The DAO address
+     */
+    function setDAOContractInitial(address _address) external {
+        require(address(contractDAO) == address(0), "already set");
+        require(_address != address(0), "zero address");
+        contractDAO = IDAO(_address);
+    }
+
+    /**
+        @notice Gets DAO address, which will receive fee from custom bridged ERC20 tokens
+        @return DAO address
+    */
+    function setTreasuryAddress(uint256 id) external returns(address) {
+        address newTreasuryAddress = contractDAO.isSetTreasuryAvailable(id);
+        treasuryAddress = newTreasuryAddress;
+        require(contractDAO.confirmSetTreasuryRequest(id), "confirmed");
     }
 
     /**
         @notice A deposit is initiatied by making a deposit in the Bridge contract.
+        @param destinationDomainID ID of chain deposit will be bridged to.
         @param resourceID ResourceID used to find address of token to be used for deposit.
         @param depositer Address of account making the deposit in the Bridge contract.
         @param data Consists of {amount} padded to 32 bytes.
@@ -32,6 +77,7 @@ contract ERC20Handler is IDepositExecute, HandlerHelpers, ERC20Safe {
         @return an empty data.
      */
     function deposit(
+        uint8 destinationDomainID,
         bytes32 resourceID,
         address depositer,
         bytes   calldata data
@@ -42,16 +88,23 @@ contract ERC20Handler is IDepositExecute, HandlerHelpers, ERC20Safe {
         address tokenAddress = _resourceIDToTokenContractAddress[resourceID];
         require(_contractWhitelist[tokenAddress], "provided tokenAddress is not whitelisted");
 
+        uint256 feeValue = evaluateFee(destinationDomainID, tokenAddress, amount);
+        uint256 transferAmount = amount - feeValue;
+
+        lockERC20(tokenAddress, depositer, treasuryAddress, feeValue);
         if (_burnList[tokenAddress]) {
-            burnERC20(tokenAddress, depositer, amount);
+            burnERC20(tokenAddress, depositer, transferAmount);
         } else {
-            lockERC20(tokenAddress, depositer, address(this), amount);
+            lockERC20(tokenAddress, depositer, address(this), transferAmount);
         }
+        emit DepositERC20(tokenAddress, destinationDomainID, depositer, amount, feeValue, transferAmount);
     }
 
     /**
         @notice Proposal execution should be initiated when a proposal is finalized in the Bridge contract.
         by a relayer on the deposit's destination chain.
+        @param destinationDomainID ID of chain deposit will be bridged to.
+        @param resourceID ResourceID used to find address of token to be used for deposit.
         @param data Consists of {resourceID}, {amount}, {lenDestinationRecipientAddress},
         and {destinationRecipientAddress} all padded to 32 bytes.
         @notice Data passed into the function should be constructed as follows:
@@ -59,7 +112,7 @@ contract ERC20Handler is IDepositExecute, HandlerHelpers, ERC20Safe {
         destinationRecipientAddress length     uint256     bytes  32 - 64
         destinationRecipientAddress            bytes       bytes  64 - END
      */
-    function executeProposal(bytes32 resourceID, bytes calldata data) external override onlyBridge {
+    function executeProposal(uint8 destinationDomainID, bytes32 resourceID, bytes calldata data) external override onlyBridge {
         uint256       amount;
         uint256       lenDestinationRecipientAddress;
         bytes  memory destinationRecipientAddress;
@@ -76,10 +129,13 @@ contract ERC20Handler is IDepositExecute, HandlerHelpers, ERC20Safe {
 
         require(_contractWhitelist[tokenAddress], "provided tokenAddress is not whitelisted");
 
+        uint256 feeValue = evaluateFee(destinationDomainID, tokenAddress, amount);
+        uint256 transferAmount = amount - feeValue;
+
         if (_burnList[tokenAddress]) {
-            mintERC20(tokenAddress, address(recipientAddress), amount);
+            mintERC20(tokenAddress, address(recipientAddress), transferAmount);
         } else {
-            releaseERC20(tokenAddress, address(recipientAddress), amount);
+            releaseERC20(tokenAddress, address(recipientAddress), transferAmount);
         }
     }
 
@@ -99,5 +155,16 @@ contract ERC20Handler is IDepositExecute, HandlerHelpers, ERC20Safe {
         (tokenAddress, recipient, amount) = abi.decode(data, (address, address, uint));
 
         releaseERC20(tokenAddress, recipient, amount);
+    }
+
+    function evaluateFee(uint8 destinationDomainID, address tokenAddress, uint256 amount) private view returns (uint256 fee) {
+        (uint256 basicFee, uint256 minAmount, uint256 maxAmount) = contractBridge.getFee(tokenAddress, destinationDomainID);
+        require(minAmount <= amount, "amount < min amount");
+        require(maxAmount >= amount, "amount > max amount");
+
+        fee = amount * contractBridge.getFeePercent() / contractBridge.getFeeMaxValue();
+        if(fee < basicFee) {
+            fee = basicFee;
+        }
     }
 }

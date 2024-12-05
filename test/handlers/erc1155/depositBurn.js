@@ -7,6 +7,7 @@ const TruffleAssert = require('truffle-assertions');
 
 const Helpers = require('../../helpers');
 
+const DAOContract = artifacts.require("DAO");
 const BridgeContract = artifacts.require("Bridge");
 const ERC1155MintableContract = artifacts.require("ERC1155PresetMinterPauser");
 const ERC1155HandlerContract = artifacts.require("ERC1155Handler");
@@ -20,6 +21,12 @@ contract('ERC1155Handler - [Deposit Burn ERC1155]', async (accounts) => {
     const tokenID = 1;
     const tokenAmount = 100;
 
+    const feeMaxValue = 10000;
+    const feePercent = 10;
+
+    const someAddress = "0xcafecafecafecafecafecafecafecafecafecafe";
+
+    let DAOInstance;
     let BridgeInstance;
     let ERC1155MintableInstance1;
     let ERC1155MintableInstance2;
@@ -33,10 +40,13 @@ contract('ERC1155Handler - [Deposit Burn ERC1155]', async (accounts) => {
 
     beforeEach(async () => {
         await Promise.all([
-            BridgeContract.new(domainID, [], relayerThreshold, 0, 100).then(instance => BridgeInstance = instance),
+            BridgeContract.new(domainID, [], relayerThreshold, 100, feeMaxValue, feePercent).then(instance => BridgeInstance = instance),
             ERC1155MintableContract.new("TOK").then(instance => ERC1155MintableInstance1 = instance),
             ERC1155MintableContract.new("TOK").then(instance => ERC1155MintableInstance2 = instance)
         ])
+
+        DAOInstance = await DAOContract.new(BridgeInstance.address, someAddress);
+        await BridgeInstance.setDAOContractInitial(DAOInstance.address);
 
         resourceID1 = Helpers.createResourceID(ERC1155MintableInstance1.address, domainID);
         resourceID2 = Helpers.createResourceID(ERC1155MintableInstance2.address, domainID);
@@ -49,12 +59,13 @@ contract('ERC1155Handler - [Deposit Burn ERC1155]', async (accounts) => {
             ERC1155MintableInstance1.mintBatch(depositerAddress, [tokenID], [tokenAmount], "0x0")
         ]);
            
-        await Promise.all([
-            ERC1155MintableInstance1.setApprovalForAll(ERC1155HandlerInstance.address, true, { from: depositerAddress }),
-            BridgeInstance.adminSetResource(ERC1155HandlerInstance.address, resourceID1, ERC1155MintableInstance1.address),
-            BridgeInstance.adminSetResource(ERC1155HandlerInstance.address, resourceID2, ERC1155MintableInstance2.address),
-            BridgeInstance.adminSetBurnable(ERC1155HandlerInstance.address, ERC1155MintableInstance1.address),
-        ]);
+        await ERC1155MintableInstance1.setApprovalForAll(ERC1155HandlerInstance.address, true, { from: depositerAddress });
+        await DAOInstance.newSetResourceRequest(ERC1155HandlerInstance.address, resourceID1, ERC1155MintableInstance1.address);
+        await DAOInstance.newSetResourceRequest(ERC1155HandlerInstance.address, resourceID2, ERC1155MintableInstance2.address);
+        await DAOInstance.newSetBurnableRequest(ERC1155HandlerInstance.address, ERC1155MintableInstance1.address);
+        await BridgeInstance.adminSetResource(1);
+        await BridgeInstance.adminSetResource(2);
+        await BridgeInstance.adminSetBurnable(1);
 
         depositData = Helpers.createERC1155DepositData([tokenID], [tokenAmount]);
    });

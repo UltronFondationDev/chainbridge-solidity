@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: LGPL-3.0-only
  */
 const Ethers = require('ethers');
-
 const Helpers = require('../helpers');
 
+const DAOContract = artifacts.require("DAO");
 const BridgeContract = artifacts.require("Bridge");
 const ERC20HandlerContract = artifacts.require("ERC20Handler");
 const ERC20MintableContract = artifacts.require("ERC20PresetMinterPauser");
@@ -27,14 +27,23 @@ contract('Gas Benchmark - [Execute Proposal]', async (accounts) => {
     const depositerAddress = accounts[1];
     const recipientAddress = accounts[2];
     const lenRecipientAddress = 20;
+    const feeMaxValue = 10000;
+    const feePercent = 10;
     const gasBenchmarks = [];
+    
+    const someAddress = "0xcafecafecafecafecafecafecafecafecafecafe";
 
     const initialRelayers = [relayerAddress];
-    const erc20TokenAmount = 100;
+    const erc20TokenAmount = Ethers.utils.parseUnits("100", 6);;
     const erc721TokenID = 1;
     const erc1155TokenID = 1;
     const erc1155TokenAmount = 100;
 
+    const basicFee = Ethers.utils.parseUnits("0.9", 6);
+    const minAmount = Ethers.utils.parseUnits("10", 6);
+    const maxAmount = Ethers.utils.parseUnits("1000000", 6);
+
+    let DAOInstance;
     let BridgeInstance;
     let ERC20MintableInstance;
     let ERC20HandlerInstance;
@@ -57,12 +66,12 @@ contract('Gas Benchmark - [Execute Proposal]', async (accounts) => {
     let threeArgumentsResourceID;
 
     const deposit = (resourceID, depositData) => BridgeInstance.deposit(domainID, resourceID, depositData, { from: depositerAddress });
-    const vote = (resourceID, depositNonce, depositData) => BridgeInstance.voteProposal(domainID, depositNonce, resourceID, depositData, { from: relayerAddress });
-    const execute = (depositNonce, depositData, resourceID) => BridgeInstance.executeProposal(domainID, depositNonce, depositData, resourceID, true);
+    const vote = (resourceID, depositNonce, depositData) => BridgeInstance.voteProposal(domainID, domainID, depositNonce, resourceID, depositData, { from: relayerAddress });
+    const execute = (depositNonce, depositData, resourceID) => BridgeInstance.executeProposal(domainID, domainID, depositNonce, depositData, resourceID, true);
 
     before(async () => {
         await Promise.all([
-            BridgeContract.new(domainID, initialRelayers, relayerThreshold, 0, 100).then(instance => BridgeInstance = instance),
+            BridgeContract.new(domainID, initialRelayers, relayerThreshold, 100, feeMaxValue, feePercent).then(instance => BridgeInstance = instance),
             ERC20MintableContract.new("token", "TOK").then(instance => ERC20MintableInstance = instance),
             ERC721MintableContract.new("token", "TOK", "").then(instance => ERC721MintableInstance = instance),
             ERC1155MintableContract.new("TOK").then(instance => ERC1155MintableInstance = instance),
@@ -114,7 +123,8 @@ contract('Gas Benchmark - [Execute Proposal]', async (accounts) => {
             Helpers.blankFunctionSig];
 
         await Promise.all([
-            ERC20HandlerContract.new(BridgeInstance.address).then(instance => ERC20HandlerInstance = instance),
+            DAOContract.new(BridgeInstance.address, someAddress).then(instance => DAOInstance = instance),
+            ERC20HandlerContract.new(BridgeInstance.address, someAddress).then(instance => ERC20HandlerInstance = instance),
             ERC20MintableInstance.mint(depositerAddress, erc20TokenAmount),
             ERC721HandlerContract.new(BridgeInstance.address).then(instance => ERC721HandlerInstance = instance),
             ERC721MintableInstance.mint(depositerAddress, erc721TokenID, ""),
@@ -123,19 +133,32 @@ contract('Gas Benchmark - [Execute Proposal]', async (accounts) => {
             GenericHandlerInstance = await GenericHandlerContract.new(BridgeInstance.address)
         ]);
 
-        await Promise.all([
-            ERC20MintableInstance.approve(ERC20HandlerInstance.address, erc20TokenAmount, { from: depositerAddress }),
-            ERC721MintableInstance.approve(ERC721HandlerInstance.address, erc721TokenID, { from: depositerAddress }),
-            ERC1155MintableInstance.setApprovalForAll(ERC1155HandlerInstance.address, true, { from: depositerAddress }),
-            BridgeInstance.adminSetResource(ERC20HandlerInstance.address, erc20ResourceID, ERC20MintableInstance.address),
-            BridgeInstance.adminSetResource(ERC721HandlerInstance.address, erc721ResourceID, ERC721MintableInstance.address),
-            BridgeInstance.adminSetResource(ERC1155HandlerInstance.address, erc1155ResourceID, ERC1155MintableInstance.address),
-            BridgeInstance.adminSetGenericResource(GenericHandlerInstance.address, centrifugeAssetResourceID, genericInitialContractAddresses[0], genericInitialDepositFunctionSignatures[0], genericInitialDepositFunctionDepositerOffsets[0], genericInitialExecuteFunctionSignatures[0]),
-            BridgeInstance.adminSetGenericResource(GenericHandlerInstance.address, noArgumentResourceID, genericInitialContractAddresses[1], genericInitialDepositFunctionSignatures[1], genericInitialDepositFunctionDepositerOffsets[1], genericInitialExecuteFunctionSignatures[1]),
-            BridgeInstance.adminSetGenericResource(GenericHandlerInstance.address, oneArgumentResourceID, genericInitialContractAddresses[2], genericInitialDepositFunctionSignatures[2], genericInitialDepositFunctionDepositerOffsets[2], genericInitialExecuteFunctionSignatures[2]),
-            BridgeInstance.adminSetGenericResource(GenericHandlerInstance.address, twoArgumentsResourceID, genericInitialContractAddresses[3], genericInitialDepositFunctionSignatures[3], genericInitialDepositFunctionDepositerOffsets[3], genericInitialExecuteFunctionSignatures[3]),
-            BridgeInstance.adminSetGenericResource(GenericHandlerInstance.address, threeArgumentsResourceID, genericInitialContractAddresses[4], genericInitialDepositFunctionSignatures[4], genericInitialDepositFunctionDepositerOffsets[4], genericInitialExecuteFunctionSignatures[4])
-        ]);
+        await ERC20HandlerInstance.setDAOContractInitial(DAOInstance.address);
+        await BridgeInstance.setDAOContractInitial(DAOInstance.address);
+
+        await ERC20MintableInstance.approve(ERC20HandlerInstance.address, erc20TokenAmount, { from: depositerAddress });
+        await ERC721MintableInstance.approve(ERC721HandlerInstance.address, erc721TokenID, { from: depositerAddress });
+        await ERC1155MintableInstance.setApprovalForAll(ERC1155HandlerInstance.address, true, { from: depositerAddress });
+        await DAOInstance.newSetResourceRequest(ERC20HandlerInstance.address, erc20ResourceID, ERC20MintableInstance.address);
+        await DAOInstance.newSetResourceRequest(ERC721HandlerInstance.address, erc721ResourceID, ERC721MintableInstance.address);
+        await DAOInstance.newSetResourceRequest(ERC1155HandlerInstance.address, erc1155ResourceID, ERC1155MintableInstance.address);
+        await BridgeInstance.adminSetResource(1);
+        await BridgeInstance.adminSetResource(2);
+        await BridgeInstance.adminSetResource(3);
+
+        await DAOInstance.newChangeFeeRequest(ERC20MintableInstance.address, domainID, basicFee, minAmount, maxAmount);
+        await BridgeInstance.adminChangeFee(1);
+
+        await DAOInstance.newSetGenericResourceRequest(GenericHandlerInstance.address, centrifugeAssetResourceID, genericInitialContractAddresses[0], genericInitialDepositFunctionSignatures[0], genericInitialDepositFunctionDepositerOffsets[0], genericInitialExecuteFunctionSignatures[0]);
+        await DAOInstance.newSetGenericResourceRequest(GenericHandlerInstance.address, noArgumentResourceID, genericInitialContractAddresses[1], genericInitialDepositFunctionSignatures[1], genericInitialDepositFunctionDepositerOffsets[1], genericInitialExecuteFunctionSignatures[1]);
+        await DAOInstance.newSetGenericResourceRequest(GenericHandlerInstance.address, oneArgumentResourceID, genericInitialContractAddresses[2], genericInitialDepositFunctionSignatures[2], genericInitialDepositFunctionDepositerOffsets[2], genericInitialExecuteFunctionSignatures[2]);
+        await DAOInstance.newSetGenericResourceRequest(GenericHandlerInstance.address, twoArgumentsResourceID, genericInitialContractAddresses[3], genericInitialDepositFunctionSignatures[3], genericInitialDepositFunctionDepositerOffsets[3], genericInitialExecuteFunctionSignatures[3]);
+        await DAOInstance.newSetGenericResourceRequest(GenericHandlerInstance.address, threeArgumentsResourceID, genericInitialContractAddresses[4], genericInitialDepositFunctionSignatures[4], genericInitialDepositFunctionDepositerOffsets[4], genericInitialExecuteFunctionSignatures[4]);
+        await BridgeInstance.adminSetGenericResource(1);
+        await BridgeInstance.adminSetGenericResource(2);
+        await BridgeInstance.adminSetGenericResource(3);
+        await BridgeInstance.adminSetGenericResource(4);
+        await BridgeInstance.adminSetGenericResource(5);
     });
 
     it('Should execute ERC20 deposit proposal', async () => {

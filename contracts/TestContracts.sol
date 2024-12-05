@@ -65,11 +65,11 @@ contract HandlerRevert is HandlerHelpers {
     uint private _totalAmount;
 
     constructor(
-        address          bridgeAddress
+        address          bridgeAddress, address treasuryAddress
     ) public HandlerHelpers(bridgeAddress) {
     }
 
-    function executeProposal(bytes32, bytes calldata) external view {
+    function executeProposal(uint8, bytes32, bytes calldata) external view {
         if (_totalAmount == 0) {
             revert('Something bad happened');
         }

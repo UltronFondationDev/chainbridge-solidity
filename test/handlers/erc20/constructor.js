@@ -6,6 +6,7 @@
 const TruffleAssert = require('truffle-assertions');
 const Ethers = require('ethers');
 
+const DAOContract = artifacts.require("DAO");
 const BridgeContract = artifacts.require("Bridge");
 const ERC20MintableContract = artifacts.require("ERC20PresetMinterPauser");
 const ERC20HandlerContract = artifacts.require("ERC20Handler");
@@ -13,7 +14,12 @@ const ERC20HandlerContract = artifacts.require("ERC20Handler");
 contract('ERC20Handler - [constructor]', async () => {
     const relayerThreshold = 2;
     const domainID = 1;
+    const feeMaxValue = 10000;
+    const feePercent = 10;
 
+    const someAddress = "0xcafecafecafecafecafecafecafecafecafecafe";
+
+    let DAOInstance;
     let BridgeInstance;
     let ERC20MintableInstance1;
     let ERC20MintableInstance2;
@@ -24,11 +30,14 @@ contract('ERC20Handler - [constructor]', async () => {
 
     beforeEach(async () => {
         await Promise.all([
-            BridgeContract.new(domainID, [], relayerThreshold, 0, 100).then(instance => BridgeInstance = instance),
+            BridgeContract.new(domainID, [], relayerThreshold, 100, feeMaxValue, feePercent).then(instance => BridgeInstance = instance),
             ERC20MintableContract.new("token", "TOK").then(instance => ERC20MintableInstance1 = instance),
             ERC20MintableContract.new("token", "TOK").then(instance => ERC20MintableInstance2 = instance),
             ERC20MintableContract.new("token", "TOK").then(instance => ERC20MintableInstance3 = instance)
         ])
+        
+        DAOInstance = await DAOContract.new(BridgeInstance.address, someAddress);
+        await BridgeInstance.setDAOContractInitial(DAOInstance.address);
 
         initialResourceIDs = [];
         burnableContractAddresses = [];
@@ -41,16 +50,18 @@ contract('ERC20Handler - [constructor]', async () => {
     });
 
     it('[sanity] contract should be deployed successfully', async () => {
-        await TruffleAssert.passes(ERC20HandlerContract.new(BridgeInstance.address));
+        await TruffleAssert.passes(ERC20HandlerContract.new(BridgeInstance.address, someAddress));
     });
 
     it('initialResourceIDs should be parsed correctly and corresponding resourceID mappings should have expected values', async () => {
-        const ERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address);
+        const ERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address, someAddress);
+        await ERC20HandlerInstance.setDAOContractInitial(DAOInstance.address);
 
         for (i = 0; i < initialResourceIDs.length; i++) {
-            await TruffleAssert.passes(BridgeInstance.adminSetResource(ERC20HandlerInstance.address, initialResourceIDs[i], initialContractAddresses[i]));
+            await DAOInstance.newSetResourceRequest(ERC20HandlerInstance.address, initialResourceIDs[i], initialContractAddresses[i])
+            await TruffleAssert.passes(BridgeInstance.adminSetResource(i+1));
         }
-        
+ 
         for (const resourceID of initialResourceIDs) {
             const tokenAddress = `0x` + resourceID.substr(24,40);
             

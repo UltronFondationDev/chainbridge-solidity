@@ -25,11 +25,12 @@ contract ERC1155Handler is IDepositExecute, HandlerHelpers, ERC1155Safe, ERC1155
 
     /**
         @notice A deposit is initiatied by making a deposit in the Bridge contract.
+        @param destinationDomainID ID of chain deposit will be bridged to.
         @param resourceID ResourceID used to find address of token to be used for deposit.
         @param depositer Address of account making the deposit in the Bridge contract.
         @param data Consists of ABI-encoded arrays of tokenIDs and amounts.
      */
-    function deposit(bytes32 resourceID, address depositer, bytes calldata data) external override onlyBridge returns (bytes memory metaData) {
+    function deposit(uint8 destinationDomainID, bytes32 resourceID, address depositer, bytes calldata data) external override onlyBridge returns (bytes memory metaData) {
         uint[] memory tokenIDs;
         uint[] memory amounts;
 
@@ -48,10 +49,12 @@ contract ERC1155Handler is IDepositExecute, HandlerHelpers, ERC1155Safe, ERC1155
     /**
         @notice Proposal execution should be initiated when a proposal is finalized in the Bridge contract.
         by a relayer on the deposit's destination chain.
+        @param destinationDomainID ID of chain deposit will be bridged to.
+        @param resourceID ResourceID used to find address of token to be used for deposit.
         @param data Consists of ABI-encoded {tokenIDs}, {amounts}, {recipient},
         and {transferData} of types uint[], uint[], bytes, bytes.
      */
-    function executeProposal(bytes32 resourceID, bytes calldata data) external override onlyBridge {
+    function executeProposal(uint8 destinationDomainID, bytes32 resourceID, bytes calldata data) external override onlyBridge {
         uint[] memory tokenIDs;
         uint[] memory amounts;
         bytes memory recipient;

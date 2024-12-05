@@ -7,6 +7,7 @@ const Ethers = require('ethers');
 
 const Helpers = require('../helpers');
 
+const DAOContract = artifacts.require("DAO");
 const BridgeContract = artifacts.require("Bridge");
 const ERC20MintableContract = artifacts.require("ERC20PresetMinterPauser");
 const ERC20HandlerContract = artifacts.require("ERC20Handler");
@@ -23,21 +24,21 @@ contract('Bridge - [admin]', async accounts => {
     const expectedBridgeAdmin = accounts[0];
     const someAddress = "0xcafecafecafecafecafecafecafecafecafecafe";
     const bytes32 = "0x0";
+    const feeMaxValue = 10000;
+    const feePercent = 10;
     let ADMIN_ROLE;
     
     let BridgeInstance;
+    let DAOInstance;
 
     let withdrawData = '';
 
-    const assertOnlyAdmin = (method, ...params) => {
-        return TruffleAssert.reverts(method(...params, {from: initialRelayers[1]}), "sender doesn't have admin role");
-    };
-
     beforeEach(async () => {
-        BridgeInstance = await BridgeContract.new(domainID, initialRelayers, initialRelayerThreshold, 0, 100);
-        ADMIN_ROLE = await BridgeInstance.DEFAULT_ADMIN_ROLE()
+        BridgeInstance = await BridgeContract.new(domainID, initialRelayers, initialRelayerThreshold, 0, feeMaxValue, feePercent);
+        ADMIN_ROLE = await BridgeInstance.DEFAULT_ADMIN_ROLE();
+        DAOInstance = await DAOContract.new(BridgeInstance.address, someAddress);
+        await BridgeInstance.setDAOContractInitial(DAOInstance.address);
     });
-
     // Testing pausable methods
 
     it('Bridge should not be paused', async () => {
@@ -45,14 +46,17 @@ contract('Bridge - [admin]', async accounts => {
     });
 
     it('Bridge should be paused', async () => {
-        await TruffleAssert.passes(BridgeInstance.adminPauseTransfers());
+        await DAOInstance.newPauseStatusRequest(true);
+        await TruffleAssert.passes(BridgeInstance.adminPauseStatusTransfers(1));
         assert.isTrue(await BridgeInstance.paused());
     });
 
     it('Bridge should be unpaused after being paused', async () => {
-        await TruffleAssert.passes(BridgeInstance.adminPauseTransfers());
+        await DAOInstance.newPauseStatusRequest(true);
+        await TruffleAssert.passes(BridgeInstance.adminPauseStatusTransfers(1));
         assert.isTrue(await BridgeInstance.paused());
-        await TruffleAssert.passes(BridgeInstance.adminUnpauseTransfers());
+        await DAOInstance.newPauseStatusRequest(false);
+        await TruffleAssert.passes(BridgeInstance.adminPauseStatusTransfers(2));
         assert.isFalse(await BridgeInstance.paused());
     });
 
@@ -64,7 +68,8 @@ contract('Bridge - [admin]', async accounts => {
 
     it('_relayerThreshold should be initialRelayerThreshold', async () => {
         const newRelayerThreshold = 1;
-        await TruffleAssert.passes(BridgeInstance.adminChangeRelayerThreshold(newRelayerThreshold));
+        await DAOInstance.newChangeRelayerThresholdRequest(newRelayerThreshold);
+        await TruffleAssert.passes(BridgeInstance.adminChangeRelayerThreshold(1));
         assert.equal(await BridgeInstance._relayerThreshold.call(), newRelayerThreshold);
     });
 
@@ -102,7 +107,8 @@ contract('Bridge - [admin]', async accounts => {
 
     it('Bridge admin should be changed to expectedBridgeAdmin', async () => {
         const expectedBridgeAdmin2 = accounts[1];
-        await TruffleAssert.passes(BridgeInstance.renounceAdmin(expectedBridgeAdmin2))
+        await DAOInstance.newOwnerChangeRequest(expectedBridgeAdmin2);
+        await TruffleAssert.passes(BridgeInstance.renounceAdmin(1))
         assert.isTrue(await BridgeInstance.hasRole(ADMIN_ROLE, expectedBridgeAdmin2));
     });
 
@@ -111,11 +117,11 @@ contract('Bridge - [admin]', async accounts => {
     it('Should set a Resource ID for handler address', async () => {
         const ERC20MintableInstance = await ERC20MintableContract.new("token", "TOK");
         const resourceID = Helpers.createResourceID(ERC20MintableInstance.address, domainID);
-        const ERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address);
+        const ERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address, someAddress);
 
         assert.equal(await BridgeInstance._resourceIDToHandlerAddress.call(resourceID), Ethers.constants.AddressZero);
-
-        await TruffleAssert.passes(BridgeInstance.adminSetResource(ERC20HandlerInstance.address, resourceID, ERC20MintableInstance.address));
+        await DAOInstance.newSetResourceRequest(ERC20HandlerInstance.address, resourceID, ERC20MintableInstance.address);
+        await TruffleAssert.passes(BridgeInstance.adminSetResource(1));
         assert.equal(await BridgeInstance._resourceIDToHandlerAddress.call(resourceID), ERC20HandlerInstance.address);
     });
 
@@ -124,16 +130,13 @@ contract('Bridge - [admin]', async accounts => {
     it('Should set a ERC20 Resource ID and contract address', async () => {
         const ERC20MintableInstance = await ERC20MintableContract.new("token", "TOK");
         const resourceID = Helpers.createResourceID(ERC20MintableInstance.address, domainID);
-        const ERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address);
-
-        await TruffleAssert.passes(BridgeInstance.adminSetResource(
-            ERC20HandlerInstance.address, resourceID, ERC20MintableInstance.address));
+        const ERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address, someAddress);
+        await ERC20HandlerInstance.setDAOContractInitial(DAOInstance.address);
+        
+        await DAOInstance.newSetResourceRequest(ERC20HandlerInstance.address, resourceID, ERC20MintableInstance.address);
+        await TruffleAssert.passes(BridgeInstance.adminSetResource(1));
         assert.equal(await ERC20HandlerInstance._resourceIDToTokenContractAddress.call(resourceID), ERC20MintableInstance.address);
         assert.equal(await ERC20HandlerInstance._tokenContractAddressToResourceID.call(ERC20MintableInstance.address), resourceID.toLowerCase());
-    });
-
-    it('Should require admin role to set a ERC20 Resource ID and contract address', async () => {
-        await assertOnlyAdmin(BridgeInstance.adminSetResource, someAddress, bytes32, someAddress);
     });
 
     // Set Generic Resource
@@ -143,13 +146,10 @@ contract('Bridge - [admin]', async accounts => {
         const resourceID = Helpers.createResourceID(CentrifugeAssetInstance.address, domainID);
         const GenericHandlerInstance = await GenericHandlerContract.new(BridgeInstance.address);
 
-        await TruffleAssert.passes(BridgeInstance.adminSetGenericResource(GenericHandlerInstance.address, resourceID, CentrifugeAssetInstance.address, '0x00000000', 0, '0x00000000'));
+        await DAOInstance.newSetGenericResourceRequest(GenericHandlerInstance.address, resourceID, CentrifugeAssetInstance.address, '0x00000000', 0, '0x00000000');
+        await TruffleAssert.passes(BridgeInstance.adminSetGenericResource(1));
         assert.equal(await GenericHandlerInstance._resourceIDToContractAddress.call(resourceID), CentrifugeAssetInstance.address);
         assert.equal(await GenericHandlerInstance._contractAddressToResourceID.call(CentrifugeAssetInstance.address), resourceID.toLowerCase());
-    });
-
-    it('Should require admin role to set a Generic Resource ID and contract address', async () => {
-        await assertOnlyAdmin(BridgeInstance.adminSetGenericResource, someAddress, bytes32, someAddress, '0x00000000', 0, '0x00000000');
     });
 
     // Set burnable
@@ -157,34 +157,98 @@ contract('Bridge - [admin]', async accounts => {
     it('Should set ERC20MintableInstance.address as burnable', async () => {
         const ERC20MintableInstance = await ERC20MintableContract.new("token", "TOK");
         const resourceID = Helpers.createResourceID(ERC20MintableInstance.address, domainID);
-        const ERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address);
+        const ERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address, someAddress);
 
-        await TruffleAssert.passes(BridgeInstance.adminSetResource(ERC20HandlerInstance.address, resourceID, ERC20MintableInstance.address));
-        await TruffleAssert.passes(BridgeInstance.adminSetBurnable(ERC20HandlerInstance.address, ERC20MintableInstance.address));
+        await DAOInstance.newSetResourceRequest(ERC20HandlerInstance.address, resourceID, ERC20MintableInstance.address);
+        await DAOInstance.newSetBurnableRequest(ERC20HandlerInstance.address, ERC20MintableInstance.address);
+        await TruffleAssert.passes(BridgeInstance.adminSetResource(1));
+        await TruffleAssert.passes(BridgeInstance.adminSetBurnable(1));
         assert.isTrue(await ERC20HandlerInstance._burnList.call(ERC20MintableInstance.address));
     });
 
-    it('Should require admin role to set ERC20MintableInstance.address as burnable', async () => {
-        await assertOnlyAdmin(BridgeInstance.adminSetBurnable, someAddress, someAddress);
+    // Set fee percent
+
+    it('Should set fee percent', async () => {
+        await DAOInstance.newChangeFeePercentRequest(1000, 1);
+        await BridgeInstance.adminChangeFeePercent(1);
+
+        assert.equal(await BridgeInstance.getFeeMaxValue(), "1000");
+        assert.equal(await BridgeInstance.getFeePercent(), "1");
     });
 
-    // Set fee
-
-    it('Should set fee', async () => {
-        assert.equal(await BridgeInstance._fee.call(), 0);
-
-        const fee = Ethers.utils.parseEther("0.05");
-        await BridgeInstance.adminChangeFee(fee);
-        const newFee = await BridgeInstance._fee.call()
-        assert.equal(web3.utils.fromWei(newFee, "ether"), "0.05")
+    it('Should not set the same values', async () => {
+        await DAOInstance.newChangeFeePercentRequest(feeMaxValue, feePercent);
+        await TruffleAssert.reverts(BridgeInstance.adminChangeFeePercent(1), "Current fee percent values = new fee percent");
     });
 
-    it('Should not set the same fee', async () => {
-        await TruffleAssert.reverts(BridgeInstance.adminChangeFee(0), "Current fee is equal to new fee");
+    it('Should not set fee percent higher then fee max value', async () => {
+        await DAOInstance.newChangeFeePercentRequest(10, 10000);
+        await TruffleAssert.reverts(BridgeInstance.adminChangeFeePercent(1), "new feePercent >= new feeMaxValue");
     });
 
-    it('Should require admin role to set fee', async () => {
-        await assertOnlyAdmin(BridgeInstance.adminChangeFee, 0);
+    // Set fee 
+
+    it('Should set fee per token value', async () => {
+        const tokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+        const chainId = 0x1;
+        const basicFee = Ethers.utils.parseUnits("0.9", 6);
+        const minAmount = Ethers.utils.parseUnits("10", 6);
+        const maxAmount = Ethers.utils.parseUnits("1000000", 6);
+
+        await DAOInstance.newChangeFeeRequest(tokenAddress, chainId, basicFee, minAmount, maxAmount);
+        await BridgeInstance.adminChangeFee(1);
+        
+        const res = await BridgeInstance.getFee(tokenAddress, chainId);
+        const {0: resFee, 1: resMin, 2: resMax} = res;
+        assert.equal(resFee.toString(), basicFee.toString());
+        assert.equal(resMin.toString(), minAmount.toString());
+        assert.equal(resMax.toString(), maxAmount.toString());
+    });
+
+    it('Should not set the same fee values', async () => {
+        const tokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+        const chainId = 0x1;
+        const basicFee = Ethers.utils.parseUnits("0.9", 6);
+        const minAmount = Ethers.utils.parseUnits("10", 6);
+        const maxAmount = Ethers.utils.parseUnits("1000000", 6);
+
+        await DAOInstance.newChangeFeeRequest(tokenAddress, chainId, basicFee, minAmount, maxAmount);
+        await BridgeInstance.adminChangeFee(1);
+        
+        await DAOInstance.newChangeFeeRequest(tokenAddress, chainId, basicFee, minAmount, maxAmount);
+        await TruffleAssert.reverts(BridgeInstance.adminChangeFee(2), "Current fee = new fee");
+    });
+
+    it('Should not set fee when token address is zero address', async () => {
+        const chainId = 0x1;
+        const basicFee = Ethers.utils.parseUnits("0.9", 6);
+        const minAmount = Ethers.utils.parseUnits("10", 6);
+        const maxAmount = Ethers.utils.parseUnits("1000000", 6);
+        await TruffleAssert.reverts(DAOInstance.newChangeFeeRequest(Ethers.constants.AddressZero, chainId, basicFee, minAmount, maxAmount), "zero address");
+    });
+
+    it('Should not set fee when chain id <= 0', async () => {
+        const tokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+        const basicFee = Ethers.utils.parseUnits("0.9", 6);
+        const minAmount = Ethers.utils.parseUnits("10", 6);
+        const maxAmount = Ethers.utils.parseUnits("1000000", 6);
+        await TruffleAssert.reverts(DAOInstance.newChangeFeeRequest(tokenAddress, 0, basicFee, minAmount, maxAmount), "zero chain Id");
+    });
+
+    it('Should not set fee when min/max amounts <= 0', async () => {
+        const tokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+        const chainId = 0x1;
+        const basicFee = Ethers.utils.parseUnits("0.9", 6);
+        await TruffleAssert.reverts(DAOInstance.newChangeFeeRequest(tokenAddress, chainId, basicFee, 0, 0), "new min/max amount <= 0");
+    });
+
+    it('Should not set fee when min amount >= max amount', async () => {
+        const tokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+        const chainId = 0x1;
+        const basicFee = Ethers.utils.parseUnits("0.9", 6);
+        const minAmount = Ethers.utils.parseUnits("10", 6);
+        const maxAmount = Ethers.utils.parseUnits("1000000", 6);
+        await TruffleAssert.reverts(DAOInstance.newChangeFeeRequest(tokenAddress, chainId, basicFee, maxAmount, minAmount), "max amount <= min amount");
     });
 
     // Withdraw
@@ -198,9 +262,10 @@ contract('Bridge - [admin]', async accounts => {
 
         const ERC20MintableInstance = await ERC20MintableContract.new("token", "TOK");
         const resourceID = Helpers.createResourceID(ERC20MintableInstance.address, domainID);
-        const ERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address);
+        const ERC20HandlerInstance = await ERC20HandlerContract.new(BridgeInstance.address, someAddress);
 
-        await TruffleAssert.passes(BridgeInstance.adminSetResource(ERC20HandlerInstance.address, resourceID, ERC20MintableInstance.address));
+        await DAOInstance.newSetResourceRequest(ERC20HandlerInstance.address, resourceID, ERC20MintableInstance.address);
+        await TruffleAssert.passes(BridgeInstance.adminSetResource(1));
 
         await ERC20MintableInstance.mint(tokenOwner, numTokens);
         ownerBalance = await ERC20MintableInstance.balanceOf(tokenOwner);
@@ -214,33 +279,30 @@ contract('Bridge - [admin]', async accounts => {
         assert.equal(handlerBalance, numTokens);
 
         withdrawData = Helpers.createERCWithdrawData(ERC20MintableInstance.address, tokenOwner, numTokens);
-        
-        await BridgeInstance.adminWithdraw(ERC20HandlerInstance.address, withdrawData);
+
+        await DAOInstance.newWithdrawRequest(ERC20HandlerInstance.address, withdrawData);
+        await BridgeInstance.adminWithdraw(1);
         ownerBalance = await ERC20MintableInstance.balanceOf(tokenOwner);
         assert.equal(ownerBalance, numTokens);
-    });
-
-    it('Should require admin role to withdraw funds', async () => {
-        await assertOnlyAdmin(BridgeInstance.adminWithdraw, someAddress, "0x0");
     });
 
     // Set nonce
 
     it('Should set nonce', async () => {
         const nonce = 3;
-        await BridgeInstance.adminSetDepositNonce(domainID, nonce);
+        await DAOInstance.newSetNonceRequest(domainID, nonce);
+        await BridgeInstance.adminSetDepositNonce(1);
         const nonceAfterSet = await BridgeInstance._depositCounts.call(domainID);
         assert.equal(nonceAfterSet, nonce);
     });
 
-    it('Should require admin role to set nonce', async () => {
-        await assertOnlyAdmin(BridgeInstance.adminSetDepositNonce, 1, 3);
-    });
 
     it('Should not allow for decrements of the nonce', async () => {
         const currentNonce = 3;
-        await BridgeInstance.adminSetDepositNonce(domainID, currentNonce);
+        await DAOInstance.newSetNonceRequest(domainID, currentNonce);
+        await BridgeInstance.adminSetDepositNonce(1);
         const newNonce = 2;
-        await TruffleAssert.reverts(BridgeInstance.adminSetDepositNonce(domainID, newNonce), "Does not allow decrements of the nonce");
+        await DAOInstance.newSetNonceRequest(domainID, newNonce);
+        await TruffleAssert.reverts(BridgeInstance.adminSetDepositNonce(2), "Does not allow decrements of the nonce");
     });
 });

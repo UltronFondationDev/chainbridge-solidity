@@ -3,6 +3,7 @@ const Ethers = require('ethers');
 
 const Helpers = require('../../helpers');
 
+const DAOContract = artifacts.require("DAO");
 const BridgeContract = artifacts.require("Bridge");
 const ERC721MintableContract = artifacts.require("ERC721MinterBurnerPauser");
 const ERC721HandlerContract = artifacts.require("ERC721Handler");
@@ -10,16 +11,23 @@ const ERC721HandlerContract = artifacts.require("ERC721Handler");
 contract('E2E ERC721 - Same Chain', async accounts => {
     const relayerThreshold = 2;
     const domainID = 1;
+    const destinationDomainID = 2;
 
     const depositerAddress = accounts[1];
     const recipientAddress = accounts[2];
     const relayer1Address = accounts[3];
     const relayer2Address = accounts[4];
 
+    const someAddress = "0xcafecafecafecafecafecafecafecafecafecafe";
+
     const tokenID = 1;
     const depositMetadata = "0xc0ff33";
     const expectedDepositNonce = 1;
+
+    const feeMaxValue = 10000;
+    const feePercent = 10;
     
+    let DAOInstance;
     let BridgeInstance;
     let ERC721MintableInstance;
     let ERC721HandlerInstance;
@@ -34,9 +42,12 @@ contract('E2E ERC721 - Same Chain', async accounts => {
 
     beforeEach(async () => {
         await Promise.all([
-            BridgeContract.new(domainID, [relayer1Address, relayer2Address], relayerThreshold, 0, 100).then(instance => BridgeInstance = instance),
+            BridgeContract.new(domainID, [relayer1Address, relayer2Address], relayerThreshold, 100, feeMaxValue, feePercent).then(instance => BridgeInstance = instance),
             ERC721MintableContract.new("token", "TOK", "").then(instance => ERC721MintableInstance = instance)
         ]);
+
+        DAOInstance = await DAOContract.new(BridgeInstance.address, someAddress);
+        await BridgeInstance.setDAOContractInitial(DAOInstance.address);
         
         resourceID = Helpers.createResourceID(ERC721MintableInstance.address, domainID);
         initialResourceIDs = [resourceID];
@@ -45,10 +56,9 @@ contract('E2E ERC721 - Same Chain', async accounts => {
 
         ERC721HandlerInstance = await ERC721HandlerContract.new(BridgeInstance.address);
 
-        await Promise.all([
-            ERC721MintableInstance.mint(depositerAddress, tokenID, depositMetadata),
-            BridgeInstance.adminSetResource(ERC721HandlerInstance.address, resourceID, ERC721MintableInstance.address)
-        ]);
+        await ERC721MintableInstance.mint(depositerAddress, tokenID, depositMetadata);
+        await DAOInstance.newSetResourceRequest(ERC721HandlerInstance.address, resourceID, ERC721MintableInstance.address);
+        await BridgeInstance.adminSetResource(1);
 
         await ERC721MintableInstance.approve(ERC721HandlerInstance.address, tokenID, { from: depositerAddress });
 
@@ -83,6 +93,7 @@ contract('E2E ERC721 - Same Chain', async accounts => {
         // relayer1 creates the deposit proposal
         await TruffleAssert.passes(BridgeInstance.voteProposal(
             domainID,
+            domainID,
             expectedDepositNonce,
             resourceID,
             proposalData,
@@ -94,6 +105,7 @@ contract('E2E ERC721 - Same Chain', async accounts => {
         // into a finalized state
         // and then automatically executes the proposal
         await TruffleAssert.passes(BridgeInstance.voteProposal(
+            domainID,
             domainID,
             expectedDepositNonce,
             resourceID,

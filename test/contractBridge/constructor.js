@@ -10,6 +10,8 @@ contract('Bridge - [constructor]', async accounts => {
     const domainID = 1;
     const initialRelayers = accounts.slice(0, 3);
     const initialRelayerThreshold = 2;
+    const feeMaxValue = 10000;
+    const feePercent = 10;
 
     const expectedBridgeAdmin = accounts[0];
     const someAddress = "0xcafecafecafecafecafecafecafecafecafecafe";
@@ -20,15 +22,20 @@ contract('Bridge - [constructor]', async accounts => {
     };
 
     it('Bridge should not allow to set initialRelayerThreshold above 255', async () => {
-        return TruffleAssert.fails(BridgeContract.new(domainID, initialRelayers, 256, 0, 100), "value does not fit in 8 bits");
+        return TruffleAssert.fails(BridgeContract.new(domainID, initialRelayers, 256, 100, feeMaxValue, feePercent), "value does not fit in 8 bits");
     });
 
     it('Bridge should not allow to set fee above 2**128 - 1', async () => {
         return TruffleAssert.fails(BridgeContract.new(
-            domainID, initialRelayers, initialRelayerThreshold, BN(2).pow(BN(128)), 100), "value does not fit in 128 bits");
+            domainID, initialRelayers, initialRelayerThreshold, 100, BN(2).pow(BN(128)), feePercent), "value does not fit in 128 bits");
+    });
+
+    it('Bridge should not allow to set fee percent above 2**64 - 1', async () => {
+        return TruffleAssert.fails(BridgeContract.new(
+            domainID, initialRelayers, initialRelayerThreshold, 100, feeMaxValue, BN(2).pow(BN(128))), "value does not fit in 64 bits");
     });
 
     it('Bridge should not allow to set expiry above 2**40 - 1', async () => {
-        return TruffleAssert.fails(BridgeContract.new(domainID, initialRelayers, initialRelayerThreshold, 0, BN(2).pow(BN(40))), "value does not fit in 40 bits");
+        return TruffleAssert.fails(BridgeContract.new(domainID, initialRelayers, initialRelayerThreshold, BN(2).pow(BN(40)), feeMaxValue, feePercent), "value does not fit in 40 bits");
     });
 });

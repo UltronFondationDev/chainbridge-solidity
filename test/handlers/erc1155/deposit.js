@@ -7,6 +7,7 @@ const Ethers = require('ethers');
 
 const Helpers = require('../../helpers');
 
+const DAOContract = artifacts.require("DAO");
 const BridgeContract = artifacts.require("Bridge");
 const ERC1155MintableContract = artifacts.require("ERC1155PresetMinterPauser");
 const ERC1155HandlerContract = artifacts.require("ERC1155Handler");
@@ -17,8 +18,14 @@ contract('ERC1155Handler - [Deposit ERC1155]', async (accounts) => {
     const expectedDepositNonce = 1;
     const depositerAddress = accounts[1];
     const tokenID = 1;
-    const tokenAmount = 100;
 
+    const tokenAmount = 100;
+    const feeMaxValue = 10000;
+    const feePercent = 10;
+
+    const someAddress = "0xcafecafecafecafecafecafecafecafecafecafe";
+
+    let DAOInstance;
     let BridgeInstance;
     let ERC1155MintableInstance;
     let ERC1155HandlerInstance;
@@ -31,9 +38,12 @@ contract('ERC1155Handler - [Deposit ERC1155]', async (accounts) => {
 
     beforeEach(async () => {
         await Promise.all([
-            BridgeContract.new(domainID, [], relayerThreshold, 0, 100).then(instance => BridgeInstance = instance),
+            BridgeContract.new(domainID, [], relayerThreshold, 100, feeMaxValue, feePercent).then(instance => BridgeInstance = instance),
             ERC1155MintableContract.new("TOK").then(instance => ERC1155MintableInstance = instance)
         ])
+
+        DAOInstance = await DAOContract.new(BridgeInstance.address, someAddress);
+        await BridgeInstance.setDAOContractInitial(DAOInstance.address);
         
         resourceID = Helpers.createResourceID(ERC1155MintableInstance.address, domainID);
         initialResourceIDs = [resourceID];
@@ -45,10 +55,9 @@ contract('ERC1155Handler - [Deposit ERC1155]', async (accounts) => {
             ERC1155MintableInstance.mintBatch(depositerAddress, [tokenID], [tokenAmount], "0x0")
         ]);
 
-        await Promise.all([
-            ERC1155MintableInstance.setApprovalForAll(ERC1155HandlerInstance.address, true, { from: depositerAddress }),
-            BridgeInstance.adminSetResource(ERC1155HandlerInstance.address, resourceID, ERC1155MintableInstance.address)
-        ]);
+        await ERC1155MintableInstance.setApprovalForAll(ERC1155HandlerInstance.address, true, { from: depositerAddress });
+        await DAOInstance.newSetResourceRequest(ERC1155HandlerInstance.address, resourceID, ERC1155MintableInstance.address);
+        await BridgeInstance.adminSetResource(1);
         
         depositData = Helpers.createERC1155DepositData([tokenID], [tokenAmount]);
     });
