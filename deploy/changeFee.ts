@@ -533,12 +533,12 @@ task("fee-ultron", "Changing fee for ultron tokens")
         // await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "AK1111"), baseDomainId, Helpers.parseDecimals(2, 18), Helpers.parseDecimals(5, 18), Helpers.parseDecimals(50000000, 18));
         // await Helpers.delay(4000);
 
-        // // MOODENG
-        // await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "MOODENG"), domainId, Helpers.parseDecimals(1, 18), Helpers.parseDecimals(5, 18), Helpers.parseDecimals(50000000, 18));
-        // await Helpers.delay(4000);
+        // MOODENG
+        await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "MOODENG"), domainId, Helpers.parseDecimals(100000, 18), Helpers.parseDecimals(500000, 18), Helpers.parseDecimals(500000000000, 18));
+        await Helpers.delay(4000);
         
-        // await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "MOODENG"), bscDomainId, Helpers.parseDecimals(1, 18), Helpers.parseDecimals(5, 18), Helpers.parseDecimals(50000000, 18));
-        // await Helpers.delay(4000);
+        await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "MOODENG"), bscDomainId, Helpers.parseDecimals(100000 , 18), Helpers.parseDecimals(500000, 18), Helpers.parseDecimals(500000000000, 18));
+        await Helpers.delay(4000);
 
         // for(let i:number = iterator; i <= (await DAO.getChangeFeeRequestCount()); i++) {
         //     await bridge.adminChangeFee(i);
@@ -1048,11 +1048,11 @@ task("fee-bsc", "Changing fee for bsc tokens")
         // await Helpers.delay(4000);
 
         // // MOODENG
-        // await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "MOODENG"), ultronDomainId, Helpers.parseDecimals(1, 18), Helpers.parseDecimals(5, 18), Helpers.parseDecimals(50000000, 18));
-        // await Helpers.delay(4000);
+        await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "MOODENG"), ultronDomainId, Helpers.parseDecimals(100000, 18), Helpers.parseDecimals(500000, 18), Helpers.parseDecimals(500000000000, 18));
+        await Helpers.delay(4000);
         
-        // await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "MOODENG"), domainId, Helpers.parseDecimals(1, 18), Helpers.parseDecimals(5, 18), Helpers.parseDecimals(50000000, 18));
-        // await Helpers.delay(4000);
+        await DAO.newChangeFeeRequest(Helpers.findToken(tokenAddresses, "MOODENG"), domainId, Helpers.parseDecimals(100000 , 18), Helpers.parseDecimals(500000, 18), Helpers.parseDecimals(500000000000, 18));
+        await Helpers.delay(4000);
 
         // for(let i:number = iterator; i <= (await DAO.getChangeFeeRequestCount()); i++) {
         //     await bridge.adminChangeFee(i);
